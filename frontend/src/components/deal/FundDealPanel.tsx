@@ -26,7 +26,13 @@ export function FundDealPanel({ deal, onSuccess }: FundDealPanelProps) {
   }
 
   const handleCopySeller = async () => {
-    await copyToClipboard(deal.seller)
+    try {
+      await copyToClipboard(deal.seller)
+    } catch {
+      setCopiedSeller(false)
+      return
+    }
+
     setCopiedSeller(true)
     window.setTimeout(() => setCopiedSeller(false), 2500)
   }
