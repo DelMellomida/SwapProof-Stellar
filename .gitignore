@@ -8,3 +8,4 @@ SwapProof_MVP_Epic_UserStories.docx
 /frontend/node_modules/
 
 /.pnpm-store/
+/frontend/dist/
