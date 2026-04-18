@@ -18,7 +18,7 @@ A buyer in a Philippine Facebook buy-and-sell group sends ₱1,500 via GCash to 
 
 ## Solution
 
-SwapProof locks the buyer's USDC in a Soroban smart contract the moment they open a shareable deal link; the seller receives payment only after the buyer confirms receipt, and if the buyer ghosts past the agreed timeout, the seller claims automatically — Stellar provides the speed, near-zero fees, and trustless finality that make this viable for transactions as small as ₱300.
+SwapProof locks the buyer's XLM in a Soroban smart contract the moment they open a shareable deal link; the seller receives payment only after the buyer confirms receipt, and if the buyer ghosts past the agreed timeout, the seller claims automatically — Stellar provides the speed, near-zero fees, and trustless finality that make this viable for transactions as small as ₱300.
 
 ---
 
@@ -27,7 +27,7 @@ SwapProof locks the buyer's USDC in a Soroban smart contract the moment they ope
 | Feature | Usage |
 |---|---|
 | **Soroban smart contracts** | Core escrow logic — deal creation, fund locking, release, timeout claim |
-| **USDC transfers (SAC)** | Escrow token; stable value, no volatility during the deal window |
+| **XLM transfers (Native)** | Escrow token; stable value, no volatility during the deal window |
 | **On-chain events** | `created`, `funded`, `completed`, `timed_out` — full public audit trail |
 
 ---
@@ -55,18 +55,18 @@ Seller creates deal (item, price, timeout)
 Seller pastes link into Facebook Messenger chat
 
 Buyer opens link, connects Freighter wallet, reviews terms
-  → fund_deal() locks USDC in contract, binds buyer address on-chain
+  → fund_deal() locks XLM in contract, binds buyer address on-chain
   → Deal status: FUNDED
 
 Buyer receives item, taps Confirm Receipt
-  → confirm_receipt() transfers USDC to seller
+  → confirm_receipt() transfers XLM to seller
   → Deal status: COMPLETED ✅
 
   OR
 
 Buyer ghosts past timeout window
   → Seller taps Claim Payment
-  → claim_timeout() transfers USDC to seller
+  → claim_timeout() transfers XLM to seller
   → Deal status: COMPLETED (TIMEOUT) ✅
 ```
 
@@ -98,9 +98,9 @@ SwapProof targets the single most common trust failure in SEA informal commerce 
 | Function | Caller | What it does |
 |---|---|---|
 | `create_deal` | Seller | Registers deal with no buyer assigned; emits `created` |
-| `fund_deal` | Buyer | Locks USDC; binds buyer address on-chain; emits `funded` |
-| `confirm_receipt` | Buyer only | Releases USDC to seller; closes deal |
-| `claim_timeout` | Seller only | Claims USDC after timeout passes; closes deal |
+| `fund_deal` | Buyer | Locks XLM; binds buyer address on-chain; emits `funded` |
+| `confirm_receipt` | Buyer only | Releases XLM to seller; closes deal |
+| `claim_timeout` | Seller only | Claims XLM after timeout passes; closes deal |
 | `get_deal` | Anyone | Read-only; returns full deal state — source of truth |
 
 Contract state is the authoritative source of truth for fund status. Off-chain systems may cache for UX but must not decide fund movement.
@@ -151,7 +151,7 @@ cargo test
 
 ```bash
 # Fund a testnet identity
-stellar keys generate --global swapproof_admin --network testnet
+stellar keys generate swapproof_admin --network testnet
 stellar keys fund swapproof_admin --network testnet
 
 # Deploy
@@ -164,17 +164,17 @@ stellar contract deploy \
 
 ---
 
-## Get USDC Token Contract Address
+## Get XLM Token Contract Address
 
-For testnet USDC (or native XLM as a stand-in during pilot):
+For testnet XLM (native asset):
 
 ```bash
 # Native XLM SAC on testnet
 stellar contract id asset --asset native --network testnet
 # Returns a C... token contract address
 
-# For USDC-equivalent on testnet
-stellar contract id asset --asset "USDC:<ISSUER_G...>" --network testnet
+# For XLM on testnet (native asset)
+stellar contract id asset --asset native --network testnet
 ```
 
 ---
@@ -260,8 +260,8 @@ stellar contract invoke \
 - **Fix:** Deal is permanently closed. No further actions are possible on this deal ID.
 
 ### `zero balance is not sufficient to spend`
-- **Cause:** The buyer's wallet has insufficient USDC to cover the deal amount.
-- **Fix:** Fund the buyer wallet with testnet USDC before calling `fund_deal()`.
+- **Cause:** The buyer's wallet has insufficient XLM to cover the deal amount.
+- **Fix:** Fund the buyer wallet with testnet XLM before calling `fund_deal()`.
 
 ---
 

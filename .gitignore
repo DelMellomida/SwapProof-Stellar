@@ -4,3 +4,7 @@ SwapProof_MVP_Epic_UserStories.docx
 **/*.rs.bk
 
 /test_snapshots/
+
+/frontend/node_modules/
+
+/.pnpm-store/

@@ -117,13 +117,13 @@ impl SwapProofContract {
         );
     }
 
-    /// **fund_deal** — Called by the Buyer to lock USDC into the contract.
+    /// **fund_deal** — Called by the Buyer to lock escrow tokens into the contract.
     ///
     /// This is the moment the buyer becomes bound on-chain. Their address is
     /// written to the deal record and is the *only* address allowed to later
     /// call confirm_receipt().
     ///
-    /// Transfers `amount` USDC from buyer → contract.
+    /// Transfers `amount` from buyer → contract using the provided token contract.
     /// Emits: event `("deal", "funded", deal_id)`
     ///
     /// Errors if deal doesn't exist, is not PENDING_PAYMENT, or token transfer fails.
@@ -131,7 +131,7 @@ impl SwapProofContract {
         env: Env,
         deal_id: u64,
         buyer: Address,
-        usdc_token: Address,
+        token_address: Address,
     ) {
         // Require the caller to be the buyer — they must sign the transaction.
         buyer.require_auth();
@@ -150,9 +150,8 @@ impl SwapProofContract {
             panic!("deal is not available for funding");
         }
 
-        // Transfer USDC from buyer to *this* contract using the token interface.
-        // soroban_sdk::token::Client wraps the Stellar SAC (Soroban Asset Contract).
-        let token_client = token::Client::new(&env, &usdc_token);
+        // Transfer escrow tokens from buyer → this contract.
+        let token_client = token::Client::new(&env, &token_address);
         token_client.transfer(
             &buyer,
             &env.current_contract_address(),
@@ -174,7 +173,7 @@ impl SwapProofContract {
     /// **confirm_receipt** — Called by the Buyer to release funds to the Seller.
     ///
     /// Only the wallet address that funded the deal (bound at fund_deal time)
-    /// may call this. Transfers USDC from contract → seller and permanently
+    /// may call this. Transfers escrow tokens from contract → seller and permanently
     /// closes the deal as COMPLETED (FR-1.3, NFR-2.4).
     ///
     /// Emits: event `("deal", "completed", deal_id)`
@@ -182,7 +181,7 @@ impl SwapProofContract {
         env: Env,
         deal_id: u64,
         buyer: Address,
-        usdc_token: Address,
+        token_address: Address,
     ) {
         // The caller must prove they are the buyer (wallet signature required).
         buyer.require_auth();
@@ -206,8 +205,8 @@ impl SwapProofContract {
             panic!("caller is not the registered buyer");
         }
 
-        // Release USDC from contract → seller.
-        let token_client = token::Client::new(&env, &usdc_token);
+        // Release escrow tokens from contract → seller.
+        let token_client = token::Client::new(&env, &token_address);
         token_client.transfer(
             &env.current_contract_address(),
             &deal.seller,
@@ -227,7 +226,7 @@ impl SwapProofContract {
     /// **claim_timeout** — Called by the Seller after the timeout window expires.
     ///
     /// This is the "ghost buyer" protection: if the buyer never confirms receipt,
-    /// the seller can reclaim funds once the agreed ledger is passed.
+    /// the seller can reclaim escrow funds once the agreed ledger is passed.
     ///
     /// Timeout always resolves in the seller's favor — there is no dispute
     /// mechanism in the MVP (FR-1.4). On-chain enforcement means the seller
@@ -238,7 +237,7 @@ impl SwapProofContract {
         env: Env,
         deal_id: u64,
         seller: Address,
-        usdc_token: Address,
+        token_address: Address,
     ) {
         // Seller must sign the transaction.
         seller.require_auth();
@@ -266,8 +265,8 @@ impl SwapProofContract {
             panic!("timeout has not yet passed");
         }
 
-        // Release USDC from contract → seller.
-        let token_client = token::Client::new(&env, &usdc_token);
+        // Release escrow tokens from contract → seller.
+        let token_client = token::Client::new(&env, &token_address);
         token_client.transfer(
             &env.current_contract_address(),
             &deal.seller,
