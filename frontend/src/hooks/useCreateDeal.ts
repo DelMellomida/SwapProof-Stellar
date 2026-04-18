@@ -23,13 +23,15 @@ export function useCreateDeal(): UseCreateDealResult {
     try {
       const dealId = generateDealId()
       const currentLedger = await getCurrentLedger()
-      const timeoutLedger = currentLedger + values.timeoutDays * LEDGERS_PER_DAY
+      const shipDeadlineLedger = currentLedger + values.shipWindowDays * LEDGERS_PER_DAY
+      const buyerConfirmWindowLedgers = values.buyerConfirmDays * LEDGERS_PER_DAY
 
       const unsignedXdr = await buildCreateDeal({
         dealId,
         seller: address,
         amountStroops: xlmToStroops(values.amountXlm),
-        timeoutLedger,
+        shipDeadlineLedger,
+        buyerConfirmWindowLedgers,
         itemName: values.itemName,
       })
 

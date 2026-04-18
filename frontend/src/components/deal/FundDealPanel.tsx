@@ -1,7 +1,13 @@
 import { useState } from 'react'
 import { AlertTriangle, Check, Copy, ExternalLink, Loader2, Lock } from 'lucide-react'
 import { useFundDeal } from '@/hooks/useContractActions'
-import { copyToClipboard, formatAddress, formatXlm, getStellarExpertAccountUrl } from '@/lib/utils'
+import {
+  copyToClipboard,
+  formatAddress,
+  formatLedgerWindow,
+  formatXlm,
+  getStellarExpertAccountUrl,
+} from '@/lib/utils'
 import { DealTimerCountdown } from './DealTimerCountdown'
 import { cn } from '@/lib/utils'
 import type { Deal } from '@/lib/soroban/types'
@@ -26,13 +32,7 @@ export function FundDealPanel({ deal, onSuccess }: FundDealPanelProps) {
   }
 
   const handleCopySeller = async () => {
-    try {
-      await copyToClipboard(deal.seller)
-    } catch {
-      setCopiedSeller(false)
-      return
-    }
-
+    await copyToClipboard(deal.seller)
     setCopiedSeller(true)
     window.setTimeout(() => setCopiedSeller(false), 2500)
   }
@@ -44,11 +44,10 @@ export function FundDealPanel({ deal, onSuccess }: FundDealPanelProps) {
       <div>
         <h3 className="font-display text-base text-foreground mb-1">Deal Summary</h3>
         <p className="text-xs text-muted-foreground font-sans">
-          Review all terms before locking your funds. This action cannot be undone.
+          Review the shipping and buyer protection rules before locking your funds.
         </p>
       </div>
 
-      {/* Terms grid - US-008 */}
       <dl className="space-y-3 text-sm">
         {[
           { label: 'Item', value: deal.item_name },
@@ -62,10 +61,17 @@ export function FundDealPanel({ deal, onSuccess }: FundDealPanelProps) {
           },
           { label: 'Seller', value: formatAddress(deal.seller) },
           {
-            label: 'Timeout',
+            label: 'Ship by',
             value: (
-              <DealTimerCountdown timeoutLedger={deal.timeout_ledger} />
+              <DealTimerCountdown
+                deadlineLedger={deal.ship_deadline_ledger}
+                passedLabel="Shipping deadline missed"
+              />
             ),
+          },
+          {
+            label: 'Buyer review',
+            value: `${formatLedgerWindow(deal.buyer_confirm_window_ledgers)} after seller marks shipped`,
           },
         ].map(({ label, value }) => (
           <div key={label} className="flex justify-between gap-4 border-b border-border pb-3 last:border-0 last:pb-0">
@@ -130,15 +136,13 @@ export function FundDealPanel({ deal, onSuccess }: FundDealPanelProps) {
         </div>
       </div>
 
-      {/* Timeout explanation - plain language (NFR-3.2) */}
       <div className="flex gap-2.5 rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-3">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-400" />
         <p className="text-xs text-yellow-200/80 font-sans leading-relaxed">
-          If the seller delivers and you don't confirm in time, funds automatically release to the seller after the timeout window.
+          If the seller never marks this item as shipped before the shipping deadline, you can reclaim your funds. If they do mark it shipped, your review window begins and you can confirm once it arrives.
         </p>
       </div>
 
-      {/* Confirmation checkbox - US-008 AC: must explicitly check before Lock Funds activates */}
       <label className="flex cursor-pointer items-start gap-3 group">
         <div className="relative mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">
           <input
@@ -159,18 +163,16 @@ export function FundDealPanel({ deal, onSuccess }: FundDealPanelProps) {
           </div>
         </div>
         <span className="text-xs text-muted-foreground font-sans leading-relaxed">
-          I have read and agree to the deal terms. I understand my funds will be held in a smart contract until I confirm receipt or the timeout expires.
+          I understand that my funds stay locked until either I confirm receipt, I claim a refund after a missed shipping deadline, or the seller claims after marking shipment and waiting through my review window.
         </span>
       </label>
 
-      {/* Error */}
       {error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
         </div>
       )}
 
-      {/* CTA */}
       <button
         onClick={handleFund}
         disabled={!confirmed || loading}

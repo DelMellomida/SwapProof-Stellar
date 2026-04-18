@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { ExternalLink, RefreshCw, WifiOff } from 'lucide-react'
@@ -6,12 +6,16 @@ import { useDeal } from '@/hooks/useDeal'
 import { useWalletStore } from '@/store/walletStore'
 import { DealCard } from '@/components/deal/DealCard'
 import { FundDealPanel } from '@/components/deal/FundDealPanel'
-import { ConfirmReceiptButton, ClaimTimeoutButton } from '@/components/deal/DealActions'
+import {
+  ClaimRefundButton,
+  ClaimSellerTimeoutButton,
+  ConfirmReceiptButton,
+  MarkShippedButton,
+} from '@/components/deal/DealActions'
 import { ShareDealLink } from '@/components/deal/ShareDealLink'
 import { ConnectWalletButton } from '@/components/wallet/ConnectWalletButton'
-import { isTimeoutPassed } from '@/lib/utils'
+import { getStellarExpertTxUrl, isTimeoutPassed } from '@/lib/utils'
 import { getCurrentLedger } from '@/lib/soroban/contract'
-import { useEffect } from 'react'
 import type { DealStatus } from '@/lib/soroban/types'
 
 const CHAIN_SYNC_TIMEOUT_MS = 45_000
@@ -25,28 +29,26 @@ export function DealPage() {
   const walletAddress = useWalletStore((s) => s.address)
 
   const [currentLedger, setCurrentLedger] = useState<number>(0)
-  const [expired, setExpired] = useState(false)
   const [pendingStatus, setPendingStatus] = useState<DealStatus | null>(null)
   const [pendingStatusStartedAt, setPendingStatusStartedAt] = useState<number | null>(null)
 
-  // Poll current ledger to know when timeout passes
   useEffect(() => {
     const poll = async () => {
       try {
         const ledger = await getCurrentLedger()
         setCurrentLedger(ledger)
-      } catch { /* silently ignore */ }
+      } catch {
+        // keep existing state
+      }
     }
-    poll()
-    const id = setInterval(poll, 15_000)
+
+    void poll()
+    const id = setInterval(() => {
+      void poll()
+    }, 15_000)
+
     return () => clearInterval(id)
   }, [])
-
-  useEffect(() => {
-    if (deal && currentLedger > 0) {
-      setExpired(isTimeoutPassed(deal.timeout_ledger, currentLedger))
-    }
-  }, [deal, currentLedger])
 
   useEffect(() => {
     if (!pendingStatus || !deal) return
@@ -76,7 +78,6 @@ export function DealPage() {
     return () => window.clearTimeout(id)
   }, [deal, pendingStatus, pendingStatusStartedAt, refetch])
 
-  // Determine viewer role
   const isSeller = !!walletAddress && deal?.seller === walletAddress
   const isBuyer = !!walletAddress && deal?.buyer === walletAddress
   const viewerRole = isSeller ? 'seller' : isBuyer ? 'buyer' : 'visitor'
@@ -88,7 +89,7 @@ export function DealPage() {
     toast.success('Transaction confirmed!', {
       description: (
         <a
-          href={`https://stellar.expert/explorer/testnet/tx/${txHash}`}
+          href={getStellarExpertTxUrl(txHash)}
           target="_blank"
           rel="noreferrer"
           className="flex items-center gap-1 text-primary underline"
@@ -99,12 +100,6 @@ export function DealPage() {
     })
     refetch()
   }
-
-  const waitingForFundedState =
-    pendingStatus === 'Funded' &&
-    deal?.status === 'PendingPayment' &&
-    !!walletAddress &&
-    !isSeller
 
   if (loading) {
     return (
@@ -135,65 +130,126 @@ export function DealPage() {
 
   if (!deal) return null
 
+  const shipDeadlineExpired =
+    currentLedger > 0 && isTimeoutPassed(deal.ship_deadline_ledger, currentLedger)
+
+  const buyerConfirmDeadlineExpired =
+    currentLedger > 0 &&
+    !!deal.buyer_confirm_deadline_ledger &&
+    isTimeoutPassed(deal.buyer_confirm_deadline_ledger, currentLedger)
+
+  const waitingForStatusChange = !!pendingStatus && deal.status !== pendingStatus
+
   return (
     <div className="mx-auto max-w-lg px-4 sm:px-6 py-10 space-y-6">
-      {/* Post-creation share panel — US-006 */}
       {justCreated && (
         <div className="card-glass border-primary/20 p-5 animate-fade-in space-y-3">
-          <p className="text-xs font-display text-primary uppercase tracking-widest">Deal Created ✓</p>
+          <p className="text-xs font-display text-primary uppercase tracking-widest">Deal Created</p>
           <ShareDealLink dealId={deal.deal_id} />
         </div>
       )}
 
-      {/* Deal card — always visible (US-005, US-007) */}
       <DealCard deal={deal} viewerRole={viewerRole} />
 
-      {deal.status === 'Funded' && isBuyer && (
+      {deal.status === 'FundedAwaitingShipment' && isBuyer && (
+        <div className="rounded-2xl border border-blue-500/30 bg-blue-500/10 p-5 space-y-2 animate-fade-in">
+          <p className="text-xs font-display text-blue-300 uppercase tracking-[0.2em]">
+            Funds Secured
+          </p>
+          <p className="font-display text-base text-foreground">
+            Your escrow is locked. The seller still needs to mark this item as shipped.
+          </p>
+          <p className="text-sm text-muted-foreground font-sans">
+            If the shipping deadline passes first, you can reclaim the funds to your wallet.
+          </p>
+        </div>
+      )}
+
+      {deal.status === 'ShippedAwaitingReceipt' && isBuyer && (
         <div className="rounded-2xl border border-green-500/30 bg-green-500/10 p-5 space-y-2 animate-fade-in">
           <p className="text-xs font-display text-green-300 uppercase tracking-[0.2em]">
             Buyer Action Needed
           </p>
           <p className="font-display text-base text-foreground">
-            You already locked the funds. You can release them to the seller right now.
+            The seller marked this item as shipped. Confirm once it reaches you.
           </p>
           <p className="text-sm text-muted-foreground font-sans">
-            If you do nothing, the seller will still be able to claim the payment once the timeout passes.
+            If you stay inactive after the buyer review window ends, the seller can claim the escrow.
           </p>
         </div>
       )}
 
-      {waitingForFundedState && (
+      {deal.status === 'FundedAwaitingShipment' && isSeller && (
+        <div className="rounded-2xl border border-primary/30 bg-primary/10 p-5 space-y-2 animate-fade-in">
+          <p className="text-xs font-display text-primary uppercase tracking-[0.2em]">
+            Seller Action Needed
+          </p>
+          <p className="font-display text-base text-foreground">
+            Your buyer funded this deal. Mark it as shipped before the shipping deadline.
+          </p>
+          <p className="text-sm text-muted-foreground font-sans">
+            If you miss that deadline, the buyer becomes eligible to refund themselves from escrow.
+          </p>
+        </div>
+      )}
+
+      {deal.status === 'ShippedAwaitingReceipt' && isSeller && (
+        <div className="rounded-2xl border border-primary/30 bg-primary/10 p-5 space-y-2 animate-fade-in">
+          <p className="text-xs font-display text-primary uppercase tracking-[0.2em]">
+            Awaiting Buyer
+          </p>
+          <p className="font-display text-base text-foreground">
+            Shipment is logged on-chain. The buyer can confirm now.
+          </p>
+          <p className="text-sm text-muted-foreground font-sans">
+            If the buyer review window expires without confirmation, you can claim the escrow.
+          </p>
+        </div>
+      )}
+
+      {waitingForStatusChange && (
         <div className="rounded-2xl border border-primary/30 bg-primary/10 p-5 space-y-2 animate-fade-in">
           <p className="text-xs font-display text-primary uppercase tracking-[0.2em]">
             Updating Deal State
           </p>
           <p className="font-display text-base text-foreground">
-            Your funding transaction went through. Loading the buyer confirmation step now.
+            Your transaction went through. Waiting for the blockchain to reflect the new deal phase.
           </p>
           <p className="text-sm text-muted-foreground font-sans">
-            Once the blockchain reflects the funded state here, you'll see the release payment action instead of the lock funds button.
+            If this takes longer than expected, refreshing the page may help.
           </p>
         </div>
       )}
 
-      {deal.status === 'Funded' && !isBuyer && !isSeller && (
+      {deal.status === 'FundedAwaitingShipment' && !isBuyer && !isSeller && (
         <div className="rounded-2xl border border-border/60 bg-muted/20 p-5 space-y-2 animate-fade-in">
           <p className="text-xs font-display text-muted-foreground uppercase tracking-[0.2em]">
-            Deal Unavailable
+            Deal Reserved
           </p>
           <p className="font-display text-base text-foreground">
-            This item is already funded by another buyer.
+            This deal is already funded by another buyer.
           </p>
           <p className="text-sm text-muted-foreground font-sans">
-            Only the wallet that funded this deal can release the payment now.
+            The seller now needs to mark shipment for the funded buyer.
           </p>
         </div>
       )}
 
-      {/* ── Buyer Actions ─────────────────────────────────── */}
+      {deal.status === 'ShippedAwaitingReceipt' && !isBuyer && !isSeller && (
+        <div className="rounded-2xl border border-border/60 bg-muted/20 p-5 space-y-2 animate-fade-in">
+          <p className="text-xs font-display text-muted-foreground uppercase tracking-[0.2em]">
+            Awaiting Buyer Receipt
+          </p>
+          <p className="font-display text-base text-foreground">
+            This deal is already in progress for another buyer.
+          </p>
+          <p className="text-sm text-muted-foreground font-sans">
+            Only the funded buyer can confirm receipt, and only the seller can claim after the review window ends.
+          </p>
+        </div>
+      )}
 
-      {/* Buyer: lock funds — US-002 (only when PendingPayment) */}
-      {deal.status === 'PendingPayment' && !isSeller && !waitingForFundedState && (
+      {deal.status === 'PendingPayment' && !isSeller && !waitingForStatusChange && (
         <>
           {!walletAddress ? (
             <div className="card-glass p-5 flex flex-col items-center gap-3 text-center">
@@ -205,18 +261,44 @@ export function DealPage() {
           ) : (
             <FundDealPanel
               deal={deal}
-              onSuccess={(txHash) => handleActionSuccess(txHash, 'Funded')}
+              onSuccess={(txHash) => handleActionSuccess(txHash, 'FundedAwaitingShipment')}
             />
           )}
         </>
       )}
 
-      {/* Buyer: confirm receipt — US-003 (only when Funded and caller is buyer) */}
-      {deal.status === 'Funded' && isBuyer && (
+      {deal.status === 'FundedAwaitingShipment' && isBuyer && (
         <div className="card-glass p-5 space-y-3">
-          <p className="font-display text-sm text-foreground">Release payment to the seller</p>
+          <p className="font-display text-sm text-foreground">Refund if shipment never happens</p>
           <p className="text-xs text-muted-foreground font-sans">
-            You are the funded buyer for this deal. Use this to send the escrowed funds to the seller immediately.
+            Your refund becomes available only if the seller misses the shipping deadline without marking the item as shipped.
+          </p>
+          <ClaimRefundButton
+            deal={deal}
+            isExpired={shipDeadlineExpired}
+            onSuccess={(txHash) => handleActionSuccess(txHash, 'Refunded')}
+          />
+        </div>
+      )}
+
+      {deal.status === 'FundedAwaitingShipment' && isSeller && (
+        <div className="card-glass p-5 space-y-3">
+          <p className="font-display text-sm text-foreground">Mark shipment</p>
+          <p className="text-xs text-muted-foreground font-sans">
+            Once you have actually shipped the item, mark it here to start the buyer review window.
+          </p>
+          <MarkShippedButton
+            deal={deal}
+            onSuccess={(txHash) => handleActionSuccess(txHash, 'ShippedAwaitingReceipt')}
+          />
+        </div>
+      )}
+
+      {deal.status === 'ShippedAwaitingReceipt' && isBuyer && (
+        <div className="card-glass p-5 space-y-3">
+          <p className="font-display text-sm text-foreground">Confirm delivery</p>
+          <p className="text-xs text-muted-foreground font-sans">
+            You are the funded buyer for this deal. Confirm only after the item reaches you.
           </p>
           <ConfirmReceiptButton
             deal={deal}
@@ -225,31 +307,29 @@ export function DealPage() {
         </div>
       )}
 
-      {/* ── Seller Actions ─────────────────────────────────── */}
-
-      {/* Seller: claim timeout — US-004 (only when Funded) */}
-      {deal.status === 'Funded' && isSeller && (
+      {deal.status === 'ShippedAwaitingReceipt' && isSeller && (
         <div className="card-glass p-5 space-y-3">
-          <p className="font-display text-sm text-foreground">Claim your payment</p>
+          <p className="font-display text-sm text-foreground">Claim after buyer inactivity</p>
           <p className="text-xs text-muted-foreground font-sans">
-            Once the timeout passes and the buyer hasn't confirmed, you can claim the escrow funds.
+            If the buyer review window expires without a receipt confirmation, you can claim the escrow here.
           </p>
-          <ClaimTimeoutButton
+          <ClaimSellerTimeoutButton
             deal={deal}
-            isExpired={expired}
-            onSuccess={(txHash) => handleActionSuccess(txHash, 'TimedOut')}
+            isExpired={buyerConfirmDeadlineExpired}
+            onSuccess={(txHash) => handleActionSuccess(txHash, 'SellerClaimed')}
           />
         </div>
       )}
 
-      {/* Terminal states */}
-      {(deal.status === 'Completed' || deal.status === 'TimedOut') && (
+      {(deal.status === 'Completed' || deal.status === 'Refunded' || deal.status === 'SellerClaimed') && (
         <div className="card-glass border-border/50 p-5 text-center space-y-2">
           <p className="font-display text-sm text-muted-foreground">
-            {deal.status === 'Completed' ? 'This deal has been completed.' : 'This deal timed out.'}
+            {deal.status === 'Completed' && 'This deal has been completed.'}
+            {deal.status === 'Refunded' && 'This deal was refunded to the buyer.'}
+            {deal.status === 'SellerClaimed' && 'The seller claimed the escrow after the buyer review window ended.'}
           </p>
           <p className="text-xs text-muted-foreground font-sans">
-            No further actions are possible. The deal is permanently closed on-chain.
+            No further actions are possible. This deal is permanently closed on-chain.
           </p>
         </div>
       )}

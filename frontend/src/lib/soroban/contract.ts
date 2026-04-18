@@ -17,16 +17,10 @@ import {
 } from './client'
 import type { Deal, DealStatus } from './types'
 
-// ─── Ledger constants ─────────────────────────────────────────────────────────
-// Stellar produces ~1 ledger per 5 seconds.
-
 export const LEDGERS_PER_SECOND = 0.2
-export const LEDGERS_PER_DAY = Math.round(60 * 60 * 24 * LEDGERS_PER_SECOND) // ≈ 17280
+export const LEDGERS_PER_DAY = Math.round(60 * 60 * 24 * LEDGERS_PER_SECOND)
 
-// ─── XLM decimal conversion ──────────────────────────────────────────────────
-// XLM uses 7 decimal places (stroops).
-
-export const XLM_DECIMALS = 10_000_000n // 1e7
+export const XLM_DECIMALS = 10_000_000n
 
 export function xlmToStroops(xlm: number): bigint {
   return BigInt(Math.round(xlm * Number(XLM_DECIMALS)))
@@ -35,8 +29,6 @@ export function xlmToStroops(xlm: number): bigint {
 export function stroopsToXlm(stroops: bigint): number {
   return Number(stroops) / Number(XLM_DECIMALS)
 }
-
-// ─── ScVal helpers ────────────────────────────────────────────────────────────
 
 function u64Val(n: bigint): xdr.ScVal {
   return nativeToScVal(n, { type: 'u64' })
@@ -58,7 +50,13 @@ function stringVal(s: string): xdr.ScVal {
   return nativeToScVal(s, { type: 'string' })
 }
 
-// ─── Deal deserialization ─────────────────────────────────────────────────────
+function optionalString(value: unknown): string | null {
+  return value ? String(value) : null
+}
+
+function optionalNumber(value: unknown): number | null {
+  return value === null || value === undefined ? null : Number(value)
+}
 
 function parseStatus(raw: unknown): DealStatus {
   const tag =
@@ -70,10 +68,13 @@ function parseStatus(raw: unknown): DealStatus {
 
   const map: Record<string, DealStatus> = {
     PendingPayment: 'PendingPayment',
-    Funded: 'Funded',
+    FundedAwaitingShipment: 'FundedAwaitingShipment',
+    ShippedAwaitingReceipt: 'ShippedAwaitingReceipt',
     Completed: 'Completed',
-    TimedOut: 'TimedOut',
+    Refunded: 'Refunded',
+    SellerClaimed: 'SellerClaimed',
   }
+
   return map[tag ?? ''] ?? 'PendingPayment'
 }
 
@@ -82,20 +83,21 @@ export function parseDeal(scVal: xdr.ScVal): Deal {
   return {
     deal_id: BigInt(String(native['deal_id'])),
     seller: String(native['seller']),
-    buyer: native['buyer'] ? String(native['buyer']) : null,
+    buyer: optionalString(native['buyer']),
     amount: BigInt(String(native['amount'])),
-    timeout_ledger: Number(native['timeout_ledger']),
+    ship_deadline_ledger: Number(native['ship_deadline_ledger']),
+    buyer_confirm_window_ledgers: Number(native['buyer_confirm_window_ledgers']),
+    buyer_confirm_deadline_ledger: optionalNumber(native['buyer_confirm_deadline_ledger']),
+    shipped_at_ledger: optionalNumber(native['shipped_at_ledger']),
     item_name: String(native['item_name']),
     status: parseStatus(native['status']),
   }
 }
 
-// ─── Simulation helper ────────────────────────────────────────────────────────
-// Build → simulate → assemble. Returns a ready-to-sign transaction XDR.
-
 async function buildAndSimulate(
   server: SorobanRpc.Server,
   sourceAddress: string,
+  method: string,
   operation: xdr.Operation,
 ): Promise<string> {
   const account = await server.getAccount(sourceAddress)
@@ -110,29 +112,21 @@ async function buildAndSimulate(
   const sim = await server.simulateTransaction(tx)
 
   if (SorobanRpc.Api.isSimulationError(sim)) {
-    throw new Error(`Simulation failed: ${sim.error}`)
+    const message = String(sim.error ?? 'Unknown simulation error')
+    if (message.includes('MismatchingParameterLen')) {
+      throw new Error(
+        `The deployed contract ABI does not match this frontend for \`${method}\`. Redeploy the updated contract, then update VITE_CONTRACT_ID_TESTNET or VITE_CONTRACT_ID_MAINNET to the new contract ID.`,
+      )
+    }
+
+    throw new Error(`Simulation failed: ${message}`)
   }
 
   const assembled = SorobanRpc.assembleTransaction(tx, sim).build()
   return assembled.toXDR()
 }
 
-function isLegacyAbiMismatch(err: unknown, method: string): boolean {
-  if (!(err instanceof Error)) return false
-
-  return (
-    err.message.includes('MismatchingParameterLen') &&
-    err.message.includes(method)
-  )
-}
-
-// ─── Public contract helpers ──────────────────────────────────────────────────
-
 const contract = new Contract(CONTRACT_ID)
-
-/**
- * Read deal from contract — no signature needed. (FR-2.4 / US-005)
- */
 const NULL_STELLAR_ACCOUNT = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWHF'
 
 export async function getDeal(dealId: bigint): Promise<Deal> {
@@ -156,14 +150,12 @@ export async function getDeal(dealId: bigint): Promise<Deal> {
   return parseDeal(returnVal)
 }
 
-/**
- * Build create_deal transaction XDR — caller must sign and submit. (US-001)
- */
 export async function buildCreateDeal(params: {
   dealId: bigint
   seller: string
   amountStroops: bigint
-  timeoutLedger: number
+  shipDeadlineLedger: number
+  buyerConfirmWindowLedgers: number
   itemName: string
 }): Promise<string> {
   const server = getSorobanClient()
@@ -172,102 +164,82 @@ export async function buildCreateDeal(params: {
     u64Val(params.dealId),
     addressVal(params.seller),
     i128Val(params.amountStroops),
-    u32Val(params.timeoutLedger),
+    u32Val(params.shipDeadlineLedger),
+    u32Val(params.buyerConfirmWindowLedgers),
     stringVal(params.itemName),
   )
-  return buildAndSimulate(server, params.seller, op)
+  return buildAndSimulate(server, params.seller, 'create_deal', op)
 }
 
-/**
- * Build fund_deal transaction XDR — caller must sign and submit. (US-002)
- */
 export async function buildFundDeal(params: {
   dealId: bigint
   buyer: string
 }): Promise<string> {
   const server = getSorobanClient()
-
-  try {
-    const op = contract.call(
-      'fund_deal',
-      u64Val(params.dealId),
-      addressVal(params.buyer),
-    )
-    return await buildAndSimulate(server, params.buyer, op)
-  } catch (err) {
-    if (!isLegacyAbiMismatch(err, 'fund_deal')) throw err
-
-    const legacyOp = contract.call(
-      'fund_deal',
-      u64Val(params.dealId),
-      addressVal(params.buyer),
-      addressVal(ESCROW_ASSET_CONTRACT_ID),
-    )
-    return buildAndSimulate(server, params.buyer, legacyOp)
-  }
+  const op = contract.call(
+    'fund_deal',
+    u64Val(params.dealId),
+    addressVal(params.buyer),
+    addressVal(ESCROW_ASSET_CONTRACT_ID),
+  )
+  return buildAndSimulate(server, params.buyer, 'fund_deal', op)
 }
 
-/**
- * Build confirm_receipt transaction XDR — buyer signs. (US-003)
- */
+export async function buildMarkShipped(params: {
+  dealId: bigint
+  seller: string
+}): Promise<string> {
+  const server = getSorobanClient()
+  const op = contract.call(
+    'mark_shipped',
+    u64Val(params.dealId),
+    addressVal(params.seller),
+  )
+  return buildAndSimulate(server, params.seller, 'mark_shipped', op)
+}
+
 export async function buildConfirmReceipt(params: {
   dealId: bigint
   buyer: string
 }): Promise<string> {
   const server = getSorobanClient()
-
-  try {
-    const op = contract.call(
-      'confirm_receipt',
-      u64Val(params.dealId),
-      addressVal(params.buyer),
-    )
-    return await buildAndSimulate(server, params.buyer, op)
-  } catch (err) {
-    if (!isLegacyAbiMismatch(err, 'confirm_receipt')) throw err
-
-    const legacyOp = contract.call(
-      'confirm_receipt',
-      u64Val(params.dealId),
-      addressVal(params.buyer),
-      addressVal(ESCROW_ASSET_CONTRACT_ID),
-    )
-    return buildAndSimulate(server, params.buyer, legacyOp)
-  }
+  const op = contract.call(
+    'confirm_receipt',
+    u64Val(params.dealId),
+    addressVal(params.buyer),
+    addressVal(ESCROW_ASSET_CONTRACT_ID),
+  )
+  return buildAndSimulate(server, params.buyer, 'confirm_receipt', op)
 }
 
-/**
- * Build claim_timeout transaction XDR — seller signs. (US-004)
- */
-export async function buildClaimTimeout(params: {
+export async function buildClaimRefund(params: {
+  dealId: bigint
+  buyer: string
+}): Promise<string> {
+  const server = getSorobanClient()
+  const op = contract.call(
+    'claim_refund',
+    u64Val(params.dealId),
+    addressVal(params.buyer),
+    addressVal(ESCROW_ASSET_CONTRACT_ID),
+  )
+  return buildAndSimulate(server, params.buyer, 'claim_refund', op)
+}
+
+export async function buildClaimSellerTimeout(params: {
   dealId: bigint
   seller: string
 }): Promise<string> {
   const server = getSorobanClient()
-
-  try {
-    const op = contract.call(
-      'claim_timeout',
-      u64Val(params.dealId),
-      addressVal(params.seller),
-    )
-    return await buildAndSimulate(server, params.seller, op)
-  } catch (err) {
-    if (!isLegacyAbiMismatch(err, 'claim_timeout')) throw err
-
-    const legacyOp = contract.call(
-      'claim_timeout',
-      u64Val(params.dealId),
-      addressVal(params.seller),
-      addressVal(ESCROW_ASSET_CONTRACT_ID),
-    )
-    return buildAndSimulate(server, params.seller, legacyOp)
-  }
+  const op = contract.call(
+    'claim_seller_timeout',
+    u64Val(params.dealId),
+    addressVal(params.seller),
+    addressVal(ESCROW_ASSET_CONTRACT_ID),
+  )
+  return buildAndSimulate(server, params.seller, 'claim_seller_timeout', op)
 }
 
-/**
- * Get current ledger sequence — used to compute timeoutLedger from days. (US-001)
- */
 export async function getCurrentLedger(): Promise<number> {
   const server = getSorobanClient()
   const info = await server.getLatestLedger()

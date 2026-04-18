@@ -7,10 +7,9 @@
 ## Project Name
 
 **SwapProof**
-🔗 https://stellar.expert/explorer/testnet/tx/7228489917ef1f6edfa9cb30569254249dca2ed2bcf90b896b92f80907644d19
-🔗 https://lab.stellar.org/r/testnet/contract/CA5SCE6S7LGM2FEIKSZ2S46COEYZSON7B7KI3Z7WXZXMBZIUW4ZOU3TV
-🔗 https://stellar.expert/explorer/testnet/tx/7228489917ef1f6edfa9cb30569254249dca2ed2bcf90b896b92f80907644d19
-🔗 https://lab.stellar.org/r/testnet/contract/CA5SCE6S7LGM2FEIKSZ2S46COEYZSON7B7KI3Z7WXZXMBZIUW4ZOU3TV
+🔗 https://swap-proof-stellar-ten.vercel.app/
+🔗 https://stellar.expert/explorer/testnet/tx/c6ddf43a2351f606a58b2c9d6e803e0241e3340e1dc287a8f16bd2952a2df3e0
+🔗 https://lab.stellar.org/r/testnet/contract/CBTUT3VLK4ONMLGMILRPWK5SKJLHPRO6TWSUDPKJKLIVEMD7Z25AXAC6
 
 ---
 

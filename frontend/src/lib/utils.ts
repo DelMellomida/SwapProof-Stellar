@@ -1,7 +1,7 @@
 import { formatDistanceToNow } from 'date-fns'
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { LEDGERS_PER_SECOND } from '@/lib/soroban/contract'
+import { LEDGERS_PER_DAY, LEDGERS_PER_SECOND } from '@/lib/soroban/contract'
 import { NETWORK } from '@/lib/soroban/client'
 
 // ─── shadcn/ui cn helper ──────────────────────────────────────────────────────
@@ -80,4 +80,14 @@ export async function copyToClipboard(text: string): Promise<void> {
 export function getStellarExpertAccountUrl(address: string): string {
   const networkPath = NETWORK === 'mainnet' ? 'public' : 'testnet'
   return `https://stellar.expert/explorer/${networkPath}/account/${address}`
+}
+
+export function getStellarExpertTxUrl(txHash: string): string {
+  const networkPath = NETWORK === 'mainnet' ? 'public' : 'testnet'
+  return `https://stellar.expert/explorer/${networkPath}/tx/${txHash}`
+}
+
+export function formatLedgerWindow(ledgers: number): string {
+  const days = Math.max(1, Math.round(ledgers / LEDGERS_PER_DAY))
+  return `${days} day${days === 1 ? '' : 's'}`
 }

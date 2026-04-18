@@ -1,91 +1,98 @@
 import { useState } from 'react'
 import {
-  buildFundDeal,
+  buildClaimRefund,
+  buildClaimSellerTimeout,
   buildConfirmReceipt,
-  buildClaimTimeout,
+  buildFundDeal,
+  buildMarkShipped,
 } from '@/lib/soroban/contract'
 import { useFreighter } from './useFreighter'
 
-// ─── useFundDeal ──────────────────────────────────────────────────────────────
-// US-002 — Buyer locks funds into escrow
+function useSignedAction<TAction extends (dealId: bigint) => Promise<string>>(
+  buildLabel: string,
+  actionFactory: (address: string, signAndSubmit: (xdr: string) => Promise<string>) => TAction,
+) {
+  const { address, signAndSubmit } = useFreighter()
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const action = actionFactory(address ?? '', signAndSubmit)
+
+  const wrappedAction = async (dealId: bigint): Promise<string> => {
+    if (!address) throw new Error('Wallet not connected.')
+    setLoading(true)
+    setError(null)
+
+    try {
+      return await action(dealId)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : buildLabel
+      setError(msg)
+      throw err
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return { action: wrappedAction, loading, error }
+}
 
 export function useFundDeal() {
-  const { address, signAndSubmit } = useFreighter()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const fundDeal = async (dealId: bigint): Promise<string> => {
-    if (!address) throw new Error('Wallet not connected.')
-    setLoading(true)
-    setError(null)
-    try {
+  const { action, loading, error } = useSignedAction(
+    'Failed to lock funds.',
+    (address, signAndSubmit) => async (dealId) => {
       const xdr = await buildFundDeal({ dealId, buyer: address })
-      const txHash = await signAndSubmit(xdr)
-      return txHash
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to lock funds.'
-      setError(msg)
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }
+      return signAndSubmit(xdr)
+    },
+  )
 
-  return { fundDeal, loading, error }
+  return { fundDeal: action, loading, error }
 }
 
-// ─── useConfirmReceipt ────────────────────────────────────────────────────────
-// US-003 — Buyer confirms receipt, releases funds to seller
+export function useMarkShipped() {
+  const { action, loading, error } = useSignedAction(
+    'Failed to mark shipment.',
+    (address, signAndSubmit) => async (dealId) => {
+      const xdr = await buildMarkShipped({ dealId, seller: address })
+      return signAndSubmit(xdr)
+    },
+  )
+
+  return { markShipped: action, loading, error }
+}
 
 export function useConfirmReceipt() {
-  const { address, signAndSubmit } = useFreighter()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const confirmReceipt = async (dealId: bigint): Promise<string> => {
-    if (!address) throw new Error('Wallet not connected.')
-    setLoading(true)
-    setError(null)
-    try {
+  const { action, loading, error } = useSignedAction(
+    'Failed to confirm receipt.',
+    (address, signAndSubmit) => async (dealId) => {
       const xdr = await buildConfirmReceipt({ dealId, buyer: address })
-      const txHash = await signAndSubmit(xdr)
-      return txHash
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to confirm receipt.'
-      setError(msg)
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }
+      return signAndSubmit(xdr)
+    },
+  )
 
-  return { confirmReceipt, loading, error }
+  return { confirmReceipt: action, loading, error }
 }
 
-// ─── useClaimTimeout ──────────────────────────────────────────────────────────
-// US-004 — Seller reclaims funds after timeout
+export function useClaimRefund() {
+  const { action, loading, error } = useSignedAction(
+    'Failed to claim refund.',
+    (address, signAndSubmit) => async (dealId) => {
+      const xdr = await buildClaimRefund({ dealId, buyer: address })
+      return signAndSubmit(xdr)
+    },
+  )
 
-export function useClaimTimeout() {
-  const { address, signAndSubmit } = useFreighter()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  return { claimRefund: action, loading, error }
+}
 
-  const claimTimeout = async (dealId: bigint): Promise<string> => {
-    if (!address) throw new Error('Wallet not connected.')
-    setLoading(true)
-    setError(null)
-    try {
-      const xdr = await buildClaimTimeout({ dealId, seller: address })
-      const txHash = await signAndSubmit(xdr)
-      return txHash
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to claim payment.'
-      setError(msg)
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }
+export function useClaimSellerTimeout() {
+  const { action, loading, error } = useSignedAction(
+    'Failed to claim payment.',
+    (address, signAndSubmit) => async (dealId) => {
+      const xdr = await buildClaimSellerTimeout({ dealId, seller: address })
+      return signAndSubmit(xdr)
+    },
+  )
 
-  return { claimTimeout, loading, error }
+  return { claimSellerTimeout: action, loading, error }
 }

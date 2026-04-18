@@ -47,7 +47,7 @@ export function HomePage() {
             Create a Deal
           </Link>
           <a
-            href="https://github.com/your-org/swapproof"
+            href="https://github.com/DelMellomida/SwapProof-Stellar"
             target="_blank"
             rel="noreferrer"
             className="w-full sm:w-auto flex items-center justify-center gap-2 rounded-lg border border-border px-6 py-3 font-display text-sm text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"

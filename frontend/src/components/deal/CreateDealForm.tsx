@@ -5,7 +5,8 @@ import { useCreateDeal } from '@/hooks/useCreateDeal'
 import { cn } from '@/lib/utils'
 import type { CreateDealFormValues } from '@/lib/soroban/types'
 
-const TIMEOUT_OPTIONS = [1, 2, 3, 5, 7, 14]
+const SHIP_WINDOW_OPTIONS = [1, 2, 3, 5, 7, 14]
+const BUYER_CONFIRM_OPTIONS = [1, 2, 3, 5, 7]
 
 export function CreateDealForm() {
   const navigate = useNavigate()
@@ -14,7 +15,8 @@ export function CreateDealForm() {
   const [values, setValues] = useState<CreateDealFormValues>({
     itemName: '',
     amountXlm: 0,
-    timeoutDays: 3,
+    shipWindowDays: 3,
+    buyerConfirmDays: 2,
   })
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -28,11 +30,13 @@ export function CreateDealForm() {
   }
 
   const isValid =
-    values.itemName.trim().length >= 3 && values.amountXlm > 0 && values.timeoutDays > 0
+    values.itemName.trim().length >= 3 &&
+    values.amountXlm > 0 &&
+    values.shipWindowDays > 0 &&
+    values.buyerConfirmDays > 0
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {/* Item Name */}
       <div className="space-y-2">
         <label className="block text-xs font-display tracking-widest text-muted-foreground uppercase">
           Item Name
@@ -56,7 +60,6 @@ export function CreateDealForm() {
         </p>
       </div>
 
-      {/* Price */}
       <div className="space-y-2">
         <label className="block text-xs font-display tracking-widest text-muted-foreground uppercase">
           Price (XLM)
@@ -85,23 +88,22 @@ export function CreateDealForm() {
         </div>
       </div>
 
-      {/* Timeout */}
       <div className="space-y-3">
         <label className="block text-xs font-display tracking-widest text-muted-foreground uppercase">
-          Delivery Timeout
+          Seller Shipping Window
         </label>
         <p className="text-xs text-muted-foreground font-sans">
-          If the buyer doesn't confirm delivery within this window, you can claim your payment back.
+          The seller must mark the item as shipped within this window after the buyer funds the deal.
         </p>
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-          {TIMEOUT_OPTIONS.map((days) => (
+          {SHIP_WINDOW_OPTIONS.map((days) => (
             <button
               key={days}
               type="button"
-              onClick={() => setValues((v) => ({ ...v, timeoutDays: days }))}
+              onClick={() => setValues((v) => ({ ...v, shipWindowDays: days }))}
               className={cn(
                 'rounded-lg border py-2 text-sm font-display transition-all',
-                values.timeoutDays === days
+                values.shipWindowDays === days
                   ? 'border-primary/60 bg-primary/10 text-primary glow-teal-sm'
                   : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/30',
               )}
@@ -112,14 +114,38 @@ export function CreateDealForm() {
         </div>
       </div>
 
-      {/* Error */}
+      <div className="space-y-3">
+        <label className="block text-xs font-display tracking-widest text-muted-foreground uppercase">
+          Buyer Review Window
+        </label>
+        <p className="text-xs text-muted-foreground font-sans">
+          After the seller marks shipped, the buyer has this many days to confirm receipt before the seller can claim.
+        </p>
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+          {BUYER_CONFIRM_OPTIONS.map((days) => (
+            <button
+              key={days}
+              type="button"
+              onClick={() => setValues((v) => ({ ...v, buyerConfirmDays: days }))}
+              className={cn(
+                'rounded-lg border py-2 text-sm font-display transition-all',
+                values.buyerConfirmDays === days
+                  ? 'border-primary/60 bg-primary/10 text-primary glow-teal-sm'
+                  : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/30',
+              )}
+            >
+              {days}d
+            </button>
+          ))}
+        </div>
+      </div>
+
       {error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           {error}
         </div>
       )}
 
-      {/* Submit */}
       <button
         type="submit"
         disabled={!isValid || loading}
@@ -145,7 +171,7 @@ export function CreateDealForm() {
       </button>
 
       <p className="text-center text-xs text-muted-foreground font-sans">
-        Your deal will be recorded on the Stellar blockchain — no middleman, no custody risk.
+        The deal will record both the shipping window and the buyer review window on-chain.
       </p>
     </form>
   )
