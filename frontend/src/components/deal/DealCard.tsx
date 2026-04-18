@@ -7,11 +7,36 @@ import { cn } from '@/lib/utils'
 interface DealCardProps {
   deal: Deal
   className?: string
-  /** Show the seller's view (hides buyer actions) */
-  asSeller?: boolean
+  viewerRole?: 'seller' | 'buyer' | 'visitor'
 }
 
-export function DealCard({ deal, className, asSeller = false }: DealCardProps) {
+function getTimeoutCopy(deal: Deal, viewerRole: DealCardProps['viewerRole']): string {
+  if (deal.status === 'PendingPayment') {
+    return viewerRole === 'seller'
+      ? 'This deal is still open. Once one buyer locks the funds, nobody else can fund it.'
+      : 'Once you lock the funds, this deal is reserved for your wallet and no other buyer can take it.'
+  }
+
+  if (deal.status === 'Funded') {
+    if (viewerRole === 'buyer') {
+      return 'You can release the payment now, or leave it until the timeout passes and the seller claims it automatically.'
+    }
+
+    if (viewerRole === 'seller') {
+      return 'Your buyer has already funded this deal. You can claim the payment after the timeout if they do not release it first.'
+    }
+
+    return 'This deal is already funded by another buyer and is no longer available.'
+  }
+
+  if (deal.status === 'Completed') {
+    return 'The buyer released the payment and this deal is closed on-chain.'
+  }
+
+  return 'The timeout passed and the seller claimed the funds. This deal is closed on-chain.'
+}
+
+export function DealCard({ deal, className, viewerRole = 'visitor' }: DealCardProps) {
   return (
     <div className={cn('card-glass p-6 space-y-5 animate-fade-in', className)}>
       {/* Header */}
@@ -51,9 +76,7 @@ export function DealCard({ deal, className, asSeller = false }: DealCardProps) {
       {/* Timeout */}
       <div className="border-t border-border pt-4">
         <p className="text-xs text-muted-foreground mb-1 font-sans">
-          {asSeller
-            ? 'You can claim funds after the timeout if buyer does not confirm.'
-            : 'Funds return to you automatically if seller does not deliver in time.'}
+          {getTimeoutCopy(deal, viewerRole)}
         </p>
         <DealTimerCountdown timeoutLedger={deal.timeout_ledger} />
       </div>

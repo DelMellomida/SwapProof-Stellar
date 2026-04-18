@@ -15,7 +15,7 @@ export function ConfirmReceiptButton({ deal, onSuccess }: ConfirmReceiptButtonPr
 
   const handleConfirm = async () => {
     const confirmed = window.confirm(
-      `Confirm you received "${deal.item_name}"? This will release the payment to the seller immediately.`,
+      `Release payment for "${deal.item_name}" to the seller now? This cannot be undone.`,
     )
     if (!confirmed) return
     try {
@@ -47,10 +47,14 @@ export function ConfirmReceiptButton({ deal, onSuccess }: ConfirmReceiptButtonPr
         ) : (
           <>
             <PackageCheck className="h-4 w-4" />
-            I Received the Item
+            Release Payment to Seller
           </>
         )}
       </button>
+
+      <p className="text-xs text-muted-foreground text-center font-sans">
+        Buyer only. Use this once you are ready for the seller to receive the funds immediately.
+      </p>
 
       {error && (
         <p className="text-xs text-destructive text-center font-sans">{error}</p>

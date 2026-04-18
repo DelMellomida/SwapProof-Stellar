@@ -3,7 +3,6 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { ExternalLink, RefreshCw, WifiOff } from 'lucide-react'
 import { useDeal } from '@/hooks/useDeal'
-import { useFreighter } from '@/hooks/useFreighter'
 import { useWalletStore } from '@/store/walletStore'
 import { DealCard } from '@/components/deal/DealCard'
 import { FundDealPanel } from '@/components/deal/FundDealPanel'
@@ -13,6 +12,9 @@ import { ConnectWalletButton } from '@/components/wallet/ConnectWalletButton'
 import { isTimeoutPassed } from '@/lib/utils'
 import { getCurrentLedger } from '@/lib/soroban/contract'
 import { useEffect } from 'react'
+import type { DealStatus } from '@/lib/soroban/types'
+
+const CHAIN_SYNC_TIMEOUT_MS = 45_000
 
 export function DealPage() {
   const { dealId } = useParams<{ dealId: string }>()
@@ -20,11 +22,12 @@ export function DealPage() {
   const justCreated = searchParams.get('created') === '1'
 
   const { deal, loading, error, refetch } = useDeal(dealId)
-  const { address } = useFreighter()
   const walletAddress = useWalletStore((s) => s.address)
 
   const [currentLedger, setCurrentLedger] = useState<number>(0)
   const [expired, setExpired] = useState(false)
+  const [pendingStatus, setPendingStatus] = useState<DealStatus | null>(null)
+  const [pendingStatusStartedAt, setPendingStatusStartedAt] = useState<number | null>(null)
 
   // Poll current ledger to know when timeout passes
   useEffect(() => {
@@ -45,11 +48,43 @@ export function DealPage() {
     }
   }, [deal, currentLedger])
 
+  useEffect(() => {
+    if (!pendingStatus || !deal) return
+
+    if (deal.status === pendingStatus) {
+      setPendingStatus(null)
+      setPendingStatusStartedAt(null)
+      return
+    }
+
+    const startedAt = pendingStatusStartedAt ?? Date.now()
+    if (!pendingStatusStartedAt) {
+      setPendingStatusStartedAt(startedAt)
+    }
+
+    if (Date.now() - startedAt >= CHAIN_SYNC_TIMEOUT_MS) {
+      setPendingStatus(null)
+      setPendingStatusStartedAt(null)
+      toast.info('Blockchain sync is taking longer than expected. Refreshing the deal may help.')
+      return
+    }
+
+    const id = window.setTimeout(() => {
+      refetch()
+    }, 2_000)
+
+    return () => window.clearTimeout(id)
+  }, [deal, pendingStatus, pendingStatusStartedAt, refetch])
+
   // Determine viewer role
   const isSeller = !!walletAddress && deal?.seller === walletAddress
   const isBuyer = !!walletAddress && deal?.buyer === walletAddress
+  const viewerRole = isSeller ? 'seller' : isBuyer ? 'buyer' : 'visitor'
 
-  const handleActionSuccess = (txHash: string) => {
+  const handleActionSuccess = (txHash: string, expectedStatus: DealStatus) => {
+    setPendingStatus(expectedStatus)
+    setPendingStatusStartedAt(Date.now())
+
     toast.success('Transaction confirmed!', {
       description: (
         <a
@@ -62,8 +97,14 @@ export function DealPage() {
         </a>
       ),
     })
-    setTimeout(refetch, 3000)
+    refetch()
   }
+
+  const waitingForFundedState =
+    pendingStatus === 'Funded' &&
+    deal?.status === 'PendingPayment' &&
+    !!walletAddress &&
+    !isSeller
 
   if (loading) {
     return (
@@ -105,12 +146,54 @@ export function DealPage() {
       )}
 
       {/* Deal card — always visible (US-005, US-007) */}
-      <DealCard deal={deal} asSeller={isSeller} />
+      <DealCard deal={deal} viewerRole={viewerRole} />
+
+      {deal.status === 'Funded' && isBuyer && (
+        <div className="rounded-2xl border border-green-500/30 bg-green-500/10 p-5 space-y-2 animate-fade-in">
+          <p className="text-xs font-display text-green-300 uppercase tracking-[0.2em]">
+            Buyer Action Needed
+          </p>
+          <p className="font-display text-base text-foreground">
+            You already locked the funds. You can release them to the seller right now.
+          </p>
+          <p className="text-sm text-muted-foreground font-sans">
+            If you do nothing, the seller will still be able to claim the payment once the timeout passes.
+          </p>
+        </div>
+      )}
+
+      {waitingForFundedState && (
+        <div className="rounded-2xl border border-primary/30 bg-primary/10 p-5 space-y-2 animate-fade-in">
+          <p className="text-xs font-display text-primary uppercase tracking-[0.2em]">
+            Updating Deal State
+          </p>
+          <p className="font-display text-base text-foreground">
+            Your funding transaction went through. Loading the buyer confirmation step now.
+          </p>
+          <p className="text-sm text-muted-foreground font-sans">
+            Once the blockchain reflects the funded state here, you'll see the release payment action instead of the lock funds button.
+          </p>
+        </div>
+      )}
+
+      {deal.status === 'Funded' && !isBuyer && !isSeller && (
+        <div className="rounded-2xl border border-border/60 bg-muted/20 p-5 space-y-2 animate-fade-in">
+          <p className="text-xs font-display text-muted-foreground uppercase tracking-[0.2em]">
+            Deal Unavailable
+          </p>
+          <p className="font-display text-base text-foreground">
+            This item is already funded by another buyer.
+          </p>
+          <p className="text-sm text-muted-foreground font-sans">
+            Only the wallet that funded this deal can release the payment now.
+          </p>
+        </div>
+      )}
 
       {/* ── Buyer Actions ─────────────────────────────────── */}
 
       {/* Buyer: lock funds — US-002 (only when PendingPayment) */}
-      {deal.status === 'PendingPayment' && !isSeller && (
+      {deal.status === 'PendingPayment' && !isSeller && !waitingForFundedState && (
         <>
           {!walletAddress ? (
             <div className="card-glass p-5 flex flex-col items-center gap-3 text-center">
@@ -120,7 +203,10 @@ export function DealPage() {
               <ConnectWalletButton />
             </div>
           ) : (
-            <FundDealPanel deal={deal} onSuccess={handleActionSuccess} />
+            <FundDealPanel
+              deal={deal}
+              onSuccess={(txHash) => handleActionSuccess(txHash, 'Funded')}
+            />
           )}
         </>
       )}
@@ -128,11 +214,14 @@ export function DealPage() {
       {/* Buyer: confirm receipt — US-003 (only when Funded and caller is buyer) */}
       {deal.status === 'Funded' && isBuyer && (
         <div className="card-glass p-5 space-y-3">
-          <p className="font-display text-sm text-foreground">Did you receive the item?</p>
+          <p className="font-display text-sm text-foreground">Release payment to the seller</p>
           <p className="text-xs text-muted-foreground font-sans">
-            Confirming receipt releases payment to the seller. Only do this after you've verified the item.
+            You are the funded buyer for this deal. Use this to send the escrowed funds to the seller immediately.
           </p>
-          <ConfirmReceiptButton deal={deal} onSuccess={handleActionSuccess} />
+          <ConfirmReceiptButton
+            deal={deal}
+            onSuccess={(txHash) => handleActionSuccess(txHash, 'Completed')}
+          />
         </div>
       )}
 
@@ -148,7 +237,7 @@ export function DealPage() {
           <ClaimTimeoutButton
             deal={deal}
             isExpired={expired}
-            onSuccess={handleActionSuccess}
+            onSuccess={(txHash) => handleActionSuccess(txHash, 'TimedOut')}
           />
         </div>
       )}

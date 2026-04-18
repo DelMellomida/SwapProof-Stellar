@@ -61,7 +61,13 @@ function stringVal(s: string): xdr.ScVal {
 // ─── Deal deserialization ─────────────────────────────────────────────────────
 
 function parseStatus(raw: unknown): DealStatus {
-  const tag = (raw as { tag?: string })?.tag
+  const tag =
+    typeof raw === 'string'
+      ? raw
+      : Array.isArray(raw) && typeof raw[0] === 'string'
+        ? raw[0]
+        : (raw as { tag?: string })?.tag
+
   const map: Record<string, DealStatus> = {
     PendingPayment: 'PendingPayment',
     Funded: 'Funded',

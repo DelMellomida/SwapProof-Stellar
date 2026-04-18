@@ -35,17 +35,22 @@ export function useFreighter() {
         throw new Error(`Transaction failed: ${JSON.stringify(result.errorResult)}`)
       }
 
-      // Poll for confirmation
-      let getResult = await server.getTransaction(result.hash)
-      let attempts = 0
-      while (getResult.status === 'NOT_FOUND' && attempts < 30) {
-        await new Promise((r) => setTimeout(r, 1000))
-        getResult = await server.getTransaction(result.hash)
-        attempts++
+      if (result.status === 'TRY_AGAIN_LATER') {
+        throw new Error('The network is busy right now. Please try submitting the transaction again.')
       }
+
+      const getResult = await server.pollTransaction(result.hash, {
+        attempts: 45,
+      })
 
       if (getResult.status === 'FAILED') {
         throw new Error('Transaction was included but failed.')
+      }
+
+      if (getResult.status !== 'SUCCESS') {
+        throw new Error(
+          'Transaction submission timed out before on-chain confirmation. Please refresh the deal and check whether the funds were actually locked before trying again.',
+        )
       }
 
       return result.hash

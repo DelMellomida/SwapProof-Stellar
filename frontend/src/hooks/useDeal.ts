@@ -18,9 +18,11 @@ export function useDeal(dealId: string | undefined): UseDealResult {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const fetch = useCallback(async () => {
+  const fetch = useCallback(async (silent = false) => {
     if (!dealId) return
-    setLoading(true)
+    if (!silent) {
+      setLoading(true)
+    }
     setError(null)
     try {
       const data = await getDeal(BigInt(dealId))
@@ -37,8 +39,15 @@ export function useDeal(dealId: string | undefined): UseDealResult {
   }, [dealId])
 
   useEffect(() => {
-    fetch()
+    void fetch()
   }, [fetch])
 
-  return { deal, loading, error, refetch: fetch }
+  return {
+    deal,
+    loading,
+    error,
+    refetch: () => {
+      void fetch(true)
+    },
+  }
 }
