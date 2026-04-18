@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { Loader2, Lock, AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Check, Copy, ExternalLink, Loader2, Lock } from 'lucide-react'
 import { useFundDeal } from '@/hooks/useContractActions'
-import { formatXlm, formatAddress } from '@/lib/utils'
+import { copyToClipboard, formatAddress, formatXlm, getStellarExpertAccountUrl } from '@/lib/utils'
 import { DealTimerCountdown } from './DealTimerCountdown'
 import { cn } from '@/lib/utils'
 import type { Deal } from '@/lib/soroban/types'
@@ -14,6 +14,7 @@ interface FundDealPanelProps {
 export function FundDealPanel({ deal, onSuccess }: FundDealPanelProps) {
   const { fundDeal, loading, error } = useFundDeal()
   const [confirmed, setConfirmed] = useState(false)
+  const [copiedSeller, setCopiedSeller] = useState(false)
 
   const handleFund = async () => {
     try {
@@ -24,6 +25,20 @@ export function FundDealPanel({ deal, onSuccess }: FundDealPanelProps) {
     }
   }
 
+  const handleCopySeller = async () => {
+    try {
+      await copyToClipboard(deal.seller)
+    } catch {
+      setCopiedSeller(false)
+      return
+    }
+
+    setCopiedSeller(true)
+    window.setTimeout(() => setCopiedSeller(false), 2500)
+  }
+
+  const sellerHistoryUrl = getStellarExpertAccountUrl(deal.seller)
+
   return (
     <div className="card-glass p-6 space-y-6 animate-fade-in">
       <div>
@@ -33,7 +48,7 @@ export function FundDealPanel({ deal, onSuccess }: FundDealPanelProps) {
         </p>
       </div>
 
-      {/* Terms grid — US-008 */}
+      {/* Terms grid - US-008 */}
       <dl className="space-y-3 text-sm">
         {[
           { label: 'Item', value: deal.item_name },
@@ -60,7 +75,62 @@ export function FundDealPanel({ deal, onSuccess }: FundDealPanelProps) {
         ))}
       </dl>
 
-      {/* Timeout explanation — plain language (NFR-3.2) */}
+      <div className="space-y-3 rounded-xl border border-primary/20 bg-primary/5 p-4">
+        <div>
+          <p className="text-xs font-display uppercase tracking-widest text-primary">
+            Seller Trust Check
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground font-sans leading-relaxed">
+            Check the seller wallet before locking funds. You can copy the address or inspect its public blockchain activity.
+          </p>
+        </div>
+
+        <div className="rounded-lg border border-border bg-background/40 px-3 py-3">
+          <p className="mb-2 text-[11px] uppercase tracking-widest text-muted-foreground">
+            Full Seller Address
+          </p>
+          <p className="break-all font-mono text-xs text-foreground">
+            {deal.seller}
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={handleCopySeller}
+            className={cn(
+              'flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-xs font-display transition-all',
+              copiedSeller
+                ? 'bg-green-500/20 text-green-400'
+                : 'bg-primary/10 text-primary hover:bg-primary/20',
+            )}
+          >
+            {copiedSeller ? (
+              <>
+                <Check className="h-3.5 w-3.5" />
+                Copied!
+              </>
+            ) : (
+              <>
+                <Copy className="h-3.5 w-3.5" />
+                Copy Seller Address
+              </>
+            )}
+          </button>
+
+          <a
+            href={sellerHistoryUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="flex items-center justify-center gap-1.5 rounded-md border border-border bg-muted/30 px-3 py-2 text-xs font-display text-foreground transition-all hover:border-primary/30 hover:text-primary"
+          >
+            <ExternalLink className="h-3.5 w-3.5" />
+            View Seller History
+          </a>
+        </div>
+      </div>
+
+      {/* Timeout explanation - plain language (NFR-3.2) */}
       <div className="flex gap-2.5 rounded-lg border border-yellow-500/20 bg-yellow-500/5 p-3">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-400" />
         <p className="text-xs text-yellow-200/80 font-sans leading-relaxed">
@@ -68,7 +138,7 @@ export function FundDealPanel({ deal, onSuccess }: FundDealPanelProps) {
         </p>
       </div>
 
-      {/* Confirmation checkbox — US-008 AC: must explicitly check before Lock Funds activates */}
+      {/* Confirmation checkbox - US-008 AC: must explicitly check before Lock Funds activates */}
       <label className="flex cursor-pointer items-start gap-3 group">
         <div className="relative mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center">
           <input

@@ -2,6 +2,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { LEDGERS_PER_SECOND } from '@/lib/soroban/contract'
+import { NETWORK } from '@/lib/soroban/client'
 
 // ─── shadcn/ui cn helper ──────────────────────────────────────────────────────
 
@@ -74,4 +75,9 @@ export function generateDealId(): bigint {
 
 export async function copyToClipboard(text: string): Promise<void> {
   await navigator.clipboard.writeText(text)
+}
+
+export function getStellarExpertAccountUrl(address: string): string {
+  const networkPath = NETWORK === 'mainnet' ? 'public' : 'testnet'
+  return `https://stellar.expert/explorer/${networkPath}/account/${address}`
 }

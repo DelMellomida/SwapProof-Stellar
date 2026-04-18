@@ -3,7 +3,7 @@ import { Networks, rpc as SorobanRpc } from '@stellar/stellar-sdk'
 // ─── Network config ──────────────────────────────────────────────────────────
 // Controlled by VITE_STELLAR_NETWORK env var. (NFR-4.3)
 
-const NETWORK = import.meta.env.VITE_STELLAR_NETWORK ?? 'testnet'
+export const NETWORK = import.meta.env.VITE_STELLAR_NETWORK ?? 'testnet'
 
 export const NETWORK_PASSPHRASE =
   NETWORK === 'mainnet' ? Networks.PUBLIC : Networks.TESTNET
