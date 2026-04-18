@@ -8,19 +8,27 @@ interface DealStatusBadgeProps {
 
 const STATUS_CONFIG: Record<DealStatus, { label: string; classes: string }> = {
   PendingPayment: {
-    label: 'Awaiting Payment',
+    label: 'Awaiting Buyer',
     classes: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
   },
-  Funded: {
-    label: 'Funds Secured',
+  FundedAwaitingShipment: {
+    label: 'Awaiting Shipment',
+    classes: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
+  },
+  ShippedAwaitingReceipt: {
+    label: 'Awaiting Receipt',
     classes: 'bg-teal-500/10 text-teal-300 border-teal-500/30',
   },
   Completed: {
     label: 'Completed',
     classes: 'bg-green-500/10 text-green-400 border-green-500/30',
   },
-  TimedOut: {
-    label: 'Timed Out',
+  Refunded: {
+    label: 'Refunded',
+    classes: 'bg-orange-500/10 text-orange-300 border-orange-500/30',
+  },
+  SellerClaimed: {
+    label: 'Seller Claimed',
     classes: 'bg-zinc-500/10 text-zinc-400 border-zinc-500/30',
   },
 }

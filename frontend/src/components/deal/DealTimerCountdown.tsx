@@ -5,22 +5,22 @@ import { getCurrentLedger } from '@/lib/soroban/contract'
 import { cn } from '@/lib/utils'
 
 interface DealTimerCountdownProps {
-  timeoutLedger: number
+  deadlineLedger: number
   className?: string
-  /** Called when timeout transitions from pending → passed */
+  passedLabel?: string
   onExpire?: () => void
 }
 
 export function DealTimerCountdown({
-  timeoutLedger,
+  deadlineLedger,
   className,
+  passedLabel = 'Deadline has passed',
   onExpire,
 }: DealTimerCountdownProps) {
   const [currentLedger, setCurrentLedger] = useState<number | null>(null)
   const [displayStr, setDisplayStr] = useState('Loading...')
   const [expired, setExpired] = useState(false)
 
-  // Fetch current ledger on mount and every 30s
   useEffect(() => {
     let interval: ReturnType<typeof setInterval>
 
@@ -29,34 +29,36 @@ export function DealTimerCountdown({
         const ledger = await getCurrentLedger()
         setCurrentLedger(ledger)
       } catch {
-        // silently ignore — display will say "Loading..."
+        // keep last display state
       }
     }
 
-    poll()
-    interval = setInterval(poll, 30_000)
+    void poll()
+    interval = setInterval(() => {
+      void poll()
+    }, 30_000)
+
     return () => clearInterval(interval)
   }, [])
 
-  // Update display string every second using the ledger estimate
   useEffect(() => {
     if (currentLedger === null) return
 
     const tick = () => {
-      const passed = isTimeoutPassed(timeoutLedger, currentLedger)
+      const passed = isTimeoutPassed(deadlineLedger, currentLedger)
       if (passed) {
         setExpired(true)
-        setDisplayStr('Timeout has passed')
+        setDisplayStr(passedLabel)
         onExpire?.()
       } else {
-        setDisplayStr(formatTimeout(timeoutLedger, currentLedger))
+        setDisplayStr(formatTimeout(deadlineLedger, currentLedger))
       }
     }
 
     tick()
     const id = setInterval(tick, 1_000)
     return () => clearInterval(id)
-  }, [currentLedger, timeoutLedger, onExpire])
+  }, [currentLedger, deadlineLedger, onExpire, passedLabel])
 
   return (
     <span

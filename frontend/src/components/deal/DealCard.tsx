@@ -1,4 +1,4 @@
-import { formatXlm, formatAddress } from '@/lib/utils'
+import { formatAddress, formatLedgerWindow, formatXlm } from '@/lib/utils'
 import { DealStatusBadge } from './DealStatusBadge'
 import { DealTimerCountdown } from './DealTimerCountdown'
 import type { Deal } from '@/lib/soroban/types'
@@ -10,36 +10,51 @@ interface DealCardProps {
   viewerRole?: 'seller' | 'buyer' | 'visitor'
 }
 
-function getTimeoutCopy(deal: Deal, viewerRole: DealCardProps['viewerRole']): string {
+function getStatusCopy(deal: Deal, viewerRole: DealCardProps['viewerRole']): string {
   if (deal.status === 'PendingPayment') {
     return viewerRole === 'seller'
-      ? 'This deal is still open. Once one buyer locks the funds, nobody else can fund it.'
-      : 'Once you lock the funds, this deal is reserved for your wallet and no other buyer can take it.'
+      ? 'This deal is open and waiting for a buyer to lock the escrow.'
+      : 'Once you lock the funds, the seller must mark shipment before the shipping deadline or you can refund.'
   }
 
-  if (deal.status === 'Funded') {
+  if (deal.status === 'FundedAwaitingShipment') {
+    if (viewerRole === 'seller') {
+      return 'Your buyer funded this deal. Mark it as shipped before the shipping deadline to keep it moving.'
+    }
+
     if (viewerRole === 'buyer') {
-      return 'You can release the payment now, or leave it until the timeout passes and the seller claims it automatically.'
+      return 'Your funds are secured. If the seller misses the shipping deadline, you can reclaim your escrow.'
+    }
+
+    return 'This deal is funded and reserved for one buyer while the seller prepares shipment.'
+  }
+
+  if (deal.status === 'ShippedAwaitingReceipt') {
+    if (viewerRole === 'buyer') {
+      return 'The seller marked this deal as shipped. Confirm receipt when it arrives or the seller can claim after your review window ends.'
     }
 
     if (viewerRole === 'seller') {
-      return 'Your buyer has already funded this deal. You can claim the payment after the timeout if they do not release it first.'
+      return 'Shipment is recorded on-chain. The buyer can confirm now, or you can claim after their review window ends.'
     }
 
-    return 'This deal is already funded by another buyer and is no longer available.'
+    return 'This deal is already shipped and is waiting on the funded buyer to confirm receipt.'
   }
 
   if (deal.status === 'Completed') {
-    return 'The buyer released the payment and this deal is closed on-chain.'
+    return 'The buyer confirmed receipt and the escrow was released to the seller.'
   }
 
-  return 'The timeout passed and the seller claimed the funds. This deal is closed on-chain.'
+  if (deal.status === 'Refunded') {
+    return 'The buyer reclaimed the escrow after the seller missed the shipping deadline.'
+  }
+
+  return 'The seller claimed the escrow after shipment was marked and the buyer review window expired.'
 }
 
 export function DealCard({ deal, className, viewerRole = 'visitor' }: DealCardProps) {
   return (
     <div className={cn('card-glass p-6 space-y-5 animate-fade-in', className)}>
-      {/* Header */}
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-display text-muted-foreground tracking-widest uppercase mb-1">
@@ -50,7 +65,6 @@ export function DealCard({ deal, className, viewerRole = 'visitor' }: DealCardPr
         <DealStatusBadge status={deal.status} />
       </div>
 
-      {/* Amount */}
       <div className="rounded-lg bg-primary/5 border border-primary/10 px-4 py-3">
         <p className="text-xs text-muted-foreground font-sans mb-0.5">Escrow Amount</p>
         <p className="font-display text-2xl text-gradient-teal">
@@ -59,7 +73,6 @@ export function DealCard({ deal, className, viewerRole = 'visitor' }: DealCardPr
         </p>
       </div>
 
-      {/* Parties */}
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div>
           <p className="text-xs text-muted-foreground mb-1">Seller</p>
@@ -68,17 +81,43 @@ export function DealCard({ deal, className, viewerRole = 'visitor' }: DealCardPr
         <div>
           <p className="text-xs text-muted-foreground mb-1">Buyer</p>
           <p className="font-display text-foreground/80">
-            {deal.buyer ? formatAddress(deal.buyer) : '—'}
+            {deal.buyer ? formatAddress(deal.buyer) : '-'}
           </p>
         </div>
       </div>
 
-      {/* Timeout */}
-      <div className="border-t border-border pt-4">
-        <p className="text-xs text-muted-foreground mb-1 font-sans">
-          {getTimeoutCopy(deal, viewerRole)}
+      <div className="space-y-4 border-t border-border pt-4">
+        <p className="text-xs text-muted-foreground font-sans">
+          {getStatusCopy(deal, viewerRole)}
         </p>
-        <DealTimerCountdown timeoutLedger={deal.timeout_ledger} />
+
+        <div className="grid gap-3 text-sm">
+          <div className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3">
+            <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">
+              Shipping Deadline
+            </p>
+            <DealTimerCountdown
+              deadlineLedger={deal.ship_deadline_ledger}
+              passedLabel="Shipping deadline missed"
+            />
+          </div>
+
+          <div className="rounded-lg border border-border/60 bg-muted/20 px-4 py-3">
+            <p className="text-xs uppercase tracking-widest text-muted-foreground mb-1">
+              Buyer Review Window
+            </p>
+            {deal.buyer_confirm_deadline_ledger ? (
+              <DealTimerCountdown
+                deadlineLedger={deal.buyer_confirm_deadline_ledger}
+                passedLabel="Buyer review window ended"
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground font-sans">
+                {formatLedgerWindow(deal.buyer_confirm_window_ledgers)} starts once the seller marks shipment.
+              </p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   )
