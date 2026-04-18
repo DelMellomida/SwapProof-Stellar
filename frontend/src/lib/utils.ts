@@ -1,4 +1,4 @@
-import { formatDistanceToNow, formatDistance } from 'date-fns'
+import { formatDistanceToNow } from 'date-fns'
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { LEDGERS_PER_SECOND } from '@/lib/soroban/contract'

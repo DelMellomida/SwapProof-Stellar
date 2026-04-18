@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Clock } from 'lucide-react'
-import { formatTimeout, isTimeoutPassed, ledgerToDate } from '@/lib/utils'
+import { formatTimeout, isTimeoutPassed } from '@/lib/utils'
 import { getCurrentLedger } from '@/lib/soroban/contract'
 import { cn } from '@/lib/utils'
 
