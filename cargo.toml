@@ -1,0 +1,44 @@
+[package]
+name = "swap_proof"
+version = "0.1.0"
+edition = "2021"
+description = "SwapProof — Trustless P2P Escrow for Informal Marketplaces (Stellar Soroban Testnet MVP)"
+authors = ["Jhondel Mellomida"]
+license = "MIT"
+
+# ─── Library ─────────────────────────────────────────────────────────────────
+# cdylib  → compiled to a Wasm binary (.wasm) for deployment on Soroban
+# rlib    → compiled as a Rust library, required for test imports and integration
+[lib]
+name = "swap_proof"
+crate-type = ["cdylib", "rlib"]
+path = "contract/src/lib.rs"
+
+# ─── Production Dependencies ─────────────────────────────────────────────────
+[dependencies]
+soroban-sdk = "21.0.0"
+
+# ─── Dev / Test Dependencies ─────────────────────────────────────────────────
+# "testutils" feature enables Env::default(), mock_all_auths(),
+# register_stellar_asset_contract_v2(), and address generation helpers.
+[dev-dependencies]
+soroban-sdk = { version = "21.0.0", features = ["testutils"] }
+
+# ─── Release Profile (Wasm-Optimised) ────────────────────────────────────────
+# opt-level = "z"  → minimise binary size (preferred over "s" for on-chain storage)
+# overflow-checks  → keep enabled for safety; Soroban metering catches runaway loops
+# lto = true       → link-time optimisation; reduces dead code in the Wasm output
+# codegen-units    → single codegen unit for maximum inlining and size reduction
+# strip = "symbols"→ removes Rust debug symbols, further shrinking the Wasm binary
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = "symbols"
+lto = true
+codegen-units = 1
+
+# ─── Test Profile ────────────────────────────────────────────────────────────
+[profile.test]
+opt-level = 0
+debug = true

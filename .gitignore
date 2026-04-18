@@ -1,0 +1,6 @@
+/target/
+SwapProof_MVP_Epic_UserStories.docx
+
+**/*.rs.bk
+
+/test_snapshots/
