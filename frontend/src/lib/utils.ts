@@ -1,4 +1,4 @@
-import { formatDistanceToNow } from 'date-fns'
+import { formatDistanceToNow, format } from 'date-fns'
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
 import { LEDGERS_PER_DAY, LEDGERS_PER_SECOND } from '@/lib/soroban/contract'
@@ -58,7 +58,7 @@ export function formatTimeout(timeoutLedger: number, currentLedger: number): str
  * Returns true if the timeout has passed on-chain.
  */
 export function isTimeoutPassed(timeoutLedger: number, currentLedger: number): boolean {
-  return currentLedger > timeoutLedger
+  return currentLedger >= timeoutLedger
 }
 
 // ─── Deal ID generation ───────────────────────────────────────────────────────
@@ -90,4 +90,31 @@ export function getStellarExpertTxUrl(txHash: string): string {
 export function formatLedgerWindow(ledgers: number): string {
   const days = Math.max(1, Math.round(ledgers / LEDGERS_PER_DAY))
   return `${days} day${days === 1 ? '' : 's'}`
+}
+
+// ─── Enhanced deadline display with timestamp ─────────────────────────────────
+
+/**
+ * Format deadline with exact timestamp and countdown
+ * Returns: "Expires May 5 at 2:30 PM · 3d 4h remaining" or "Expired"
+ */
+export function formatDeadlineWithTime(timeoutLedger: number, currentLedger: number): string {
+  if (currentLedger >= timeoutLedger) return 'Expired'
+  
+  const targetDate = ledgerToDate(timeoutLedger, currentLedger)
+  const timestamp = format(targetDate, 'MMM d \'at\' h:mm a')
+  const countdown = formatDistanceToNow(targetDate)
+  
+  return `Expires ${timestamp} · ${countdown} remaining`
+}
+
+/**
+ * Get just the date portion of a deadline
+ * Returns: "May 5, 2026 at 2:30 PM"
+ */
+export function formatDeadlineDate(timeoutLedger: number, currentLedger: number): string {
+  if (currentLedger >= timeoutLedger) return 'Expired'
+  
+  const targetDate = ledgerToDate(timeoutLedger, currentLedger)
+  return format(targetDate, 'MMM d, yyyy \'at\' h:mm a')
 }
