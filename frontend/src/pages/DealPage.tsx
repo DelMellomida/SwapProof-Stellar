@@ -13,10 +13,12 @@ import {
   MarkShippedButton,
 } from '@/components/deal/DealActions'
 import { ShareDealLink } from '@/components/deal/ShareDealLink'
+import { BuyerSellerCredibilityCard } from '@/components/deal/BuyerSellerCredibilityCard'
 import { ConnectWalletButton } from '@/components/wallet/ConnectWalletButton'
-import { getStellarExpertTxUrl, isTimeoutPassed } from '@/lib/utils'
+import { formatDeadlineWithTime, formatXlm, getStellarExpertTxUrl, isTimeoutPassed } from '@/lib/utils'
 import { getCurrentLedger } from '@/lib/soroban/contract'
 import type { DealStatus } from '@/lib/soroban/types'
+import { useAiSellerCredibility } from '@/hooks/useAiSellerCredibility'
 
 const CHAIN_SYNC_TIMEOUT_MS = 45_000
 
@@ -81,6 +83,31 @@ export function DealPage() {
   const isSeller = !!walletAddress && deal?.seller === walletAddress
   const isBuyer = !!walletAddress && deal?.buyer === walletAddress
   const viewerRole = isSeller ? 'seller' : isBuyer ? 'buyer' : 'visitor'
+
+  const showPendingCredibility = !!deal && deal.status === 'PendingPayment' && !!walletAddress && !isSeller
+  const showActiveBuyerCredibility =
+    !!deal &&
+    isBuyer &&
+    (deal.status === 'FundedAwaitingShipment' || deal.status === 'ShippedAwaitingReceipt')
+  const shouldShowBuyerCredibility = showPendingCredibility || showActiveBuyerCredibility
+
+  const { data: credibilityData, loading: credibilityLoading, retry: retryCredibility } =
+    useAiSellerCredibility({
+      enabled: shouldShowBuyerCredibility,
+      dealId: deal ? deal.deal_id.toString() : null,
+      sellerAddress: deal?.seller ?? null,
+      dealStatus: deal?.status ?? null,
+      itemName: deal?.item_name ?? null,
+      escrowAmountXlm: deal ? formatXlm(deal.amount) : null,
+      shippingUrgency:
+        deal && currentLedger > 0
+          ? formatDeadlineWithTime(deal.ship_deadline_ledger, currentLedger)
+          : 'Shipping deadline will appear once chain sync completes.',
+      buyerReviewUrgency:
+        deal && currentLedger > 0 && deal.buyer_confirm_deadline_ledger
+          ? formatDeadlineWithTime(deal.buyer_confirm_deadline_ledger, currentLedger)
+          : 'Buyer review deadline starts after shipment is marked on-chain.',
+    })
 
   const handleActionSuccess = (txHash: string, expectedStatus: DealStatus) => {
     setPendingStatus(expectedStatus)
@@ -150,6 +177,15 @@ export function DealPage() {
       )}
 
       <DealCard deal={deal} viewerRole={viewerRole} />
+
+      {shouldShowBuyerCredibility && deal && (
+        <BuyerSellerCredibilityCard
+          loading={credibilityLoading}
+          data={credibilityData}
+          sellerAddress={deal.seller}
+          onRetry={retryCredibility}
+        />
+      )}
 
       {deal.status === 'FundedAwaitingShipment' && isBuyer && (
         <div className="rounded-2xl border border-blue-500/30 bg-blue-500/10 p-5 space-y-2 animate-fade-in">
