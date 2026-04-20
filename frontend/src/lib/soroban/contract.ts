@@ -84,6 +84,7 @@ export function parseDeal(scVal: xdr.ScVal): Deal {
     deal_id: BigInt(String(native['deal_id'])),
     seller: String(native['seller']),
     buyer: optionalString(native['buyer']),
+    escrow_token: optionalString(native['escrow_token']),
     amount: BigInt(String(native['amount'])),
     ship_deadline_ledger: Number(native['ship_deadline_ledger']),
     buyer_confirm_window_ledgers: Number(native['buyer_confirm_window_ledgers']),
@@ -207,7 +208,6 @@ export async function buildConfirmReceipt(params: {
     'confirm_receipt',
     u64Val(params.dealId),
     addressVal(params.buyer),
-    addressVal(ESCROW_ASSET_CONTRACT_ID),
   )
   return buildAndSimulate(server, params.buyer, 'confirm_receipt', op)
 }
@@ -221,7 +221,6 @@ export async function buildClaimRefund(params: {
     'claim_refund',
     u64Val(params.dealId),
     addressVal(params.buyer),
-    addressVal(ESCROW_ASSET_CONTRACT_ID),
   )
   return buildAndSimulate(server, params.buyer, 'claim_refund', op)
 }
@@ -235,7 +234,6 @@ export async function buildClaimSellerTimeout(params: {
     'claim_seller_timeout',
     u64Val(params.dealId),
     addressVal(params.seller),
-    addressVal(ESCROW_ASSET_CONTRACT_ID),
   )
   return buildAndSimulate(server, params.seller, 'claim_seller_timeout', op)
 }

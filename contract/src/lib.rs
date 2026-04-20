@@ -28,6 +28,7 @@ pub struct Deal {
     pub deal_id: u64,
     pub seller: Address,
     pub buyer: Option<Address>,
+    pub escrow_token: Option<Address>,
     pub amount: i128,
     pub ship_deadline_ledger: u32,
     pub buyer_confirm_window_ledgers: u32,
@@ -74,6 +75,7 @@ impl SwapProofContract {
             deal_id,
             seller: seller.clone(),
             buyer: None,
+            escrow_token: None,
             amount,
             ship_deadline_ledger,
             buyer_confirm_window_ledgers,
@@ -118,6 +120,7 @@ impl SwapProofContract {
         );
 
         deal.buyer = Some(buyer);
+        deal.escrow_token = Some(token_address);
         deal.status = DealStatus::FundedAwaitingShipment;
 
         env.storage().persistent().set(&key, &deal);
@@ -175,7 +178,6 @@ impl SwapProofContract {
         env: Env,
         deal_id: u64,
         buyer: Address,
-        token_address: Address,
     ) {
         buyer.require_auth();
 
@@ -196,7 +198,11 @@ impl SwapProofContract {
             panic!("caller is not the registered buyer");
         }
 
-        let token_client = token::Client::new(&env, &token_address);
+        let escrow_token = deal
+            .escrow_token
+            .clone()
+            .expect("escrow token not set");
+        let token_client = token::Client::new(&env, &escrow_token);
         token_client.transfer(
             &env.current_contract_address(),
             &deal.seller,
@@ -216,7 +222,6 @@ impl SwapProofContract {
         env: Env,
         deal_id: u64,
         buyer: Address,
-        token_address: Address,
     ) {
         buyer.require_auth();
 
@@ -241,7 +246,11 @@ impl SwapProofContract {
             panic!("shipping deadline has not yet passed");
         }
 
-        let token_client = token::Client::new(&env, &token_address);
+        let escrow_token = deal
+            .escrow_token
+            .clone()
+            .expect("escrow token not set");
+        let token_client = token::Client::new(&env, &escrow_token);
         token_client.transfer(
             &env.current_contract_address(),
             &buyer,
@@ -261,7 +270,6 @@ impl SwapProofContract {
         env: Env,
         deal_id: u64,
         seller: Address,
-        token_address: Address,
     ) {
         seller.require_auth();
 
@@ -289,7 +297,11 @@ impl SwapProofContract {
             panic!("buyer confirmation deadline has not yet passed");
         }
 
-        let token_client = token::Client::new(&env, &token_address);
+        let escrow_token = deal
+            .escrow_token
+            .clone()
+            .expect("escrow token not set");
+        let token_client = token::Client::new(&env, &escrow_token);
         token_client.transfer(
             &env.current_contract_address(),
             &deal.seller,

@@ -9,6 +9,7 @@ use crate::{DealStatus, SwapProofContract, SwapProofContractClient};
 struct Fixture {
     env: Env,
     client: SwapProofContractClient<'static>,
+    contract_id: Address,
     usdc: Address,
     seller: Address,
     buyer: Address,
@@ -33,7 +34,7 @@ impl Fixture {
             StellarAssetClient::new(&env, &usdc).mint(&buyer, &escrow_amount);
         }
 
-        Fixture { env, client, usdc, seller, buyer }
+        Fixture { env, client, contract_id, usdc, seller, buyer }
     }
 
     fn token(&self) -> TokenClient<'_> {
@@ -93,6 +94,7 @@ fn test_happy_path_ship_then_confirm() {
     let d = f.client.get_deal(&deal_id);
     assert_eq!(d.status, DealStatus::PendingPayment);
     assert!(d.buyer.is_none());
+    assert!(d.escrow_token.is_none());
     assert!(d.shipped_at_ledger.is_none());
     assert!(d.buyer_confirm_deadline_ledger.is_none());
 
@@ -101,6 +103,7 @@ fn test_happy_path_ship_then_confirm() {
     let d = f.client.get_deal(&deal_id);
     assert_eq!(d.status, DealStatus::FundedAwaitingShipment);
     assert_eq!(d.buyer, Some(f.buyer.clone()));
+    assert_eq!(d.escrow_token, Some(f.usdc.clone()));
     assert_eq!(f.token().balance(&f.buyer), 0);
 
     f.client.mark_shipped(&deal_id, &f.seller);
@@ -113,7 +116,7 @@ fn test_happy_path_ship_then_confirm() {
         Some(f.env.ledger().sequence() + buyer_confirm_window),
     );
 
-    f.client.confirm_receipt(&deal_id, &f.buyer, &f.usdc);
+    f.client.confirm_receipt(&deal_id, &f.buyer);
 
     let d = f.client.get_deal(&deal_id);
     assert_eq!(d.status, DealStatus::Completed);
@@ -137,7 +140,7 @@ fn test_buyer_can_refund_after_missed_shipping_deadline() {
 
     f.set_ledger(ship_deadline + 1);
 
-    f.client.claim_refund(&deal_id, &f.buyer, &f.usdc);
+    f.client.claim_refund(&deal_id, &f.buyer);
 
     let d = f.client.get_deal(&deal_id);
     assert_eq!(d.status, DealStatus::Refunded);
@@ -170,7 +173,7 @@ fn test_seller_can_claim_after_shipping_and_buyer_inactivity() {
         .expect("deadline should be set after shipment");
 
     f.set_ledger(confirm_deadline + 1);
-    f.client.claim_seller_timeout(&deal_id, &f.seller, &f.usdc);
+    f.client.claim_seller_timeout(&deal_id, &f.seller);
 
     let d = f.client.get_deal(&deal_id);
     assert_eq!(d.status, DealStatus::SellerClaimed);
@@ -192,7 +195,7 @@ fn test_confirm_receipt_rejected_for_non_buyer() {
     );
     f.client.mark_shipped(&f.default_deal_id(), &f.seller);
 
-    f.client.confirm_receipt(&f.default_deal_id(), &impostor, &f.usdc);
+    f.client.confirm_receipt(&f.default_deal_id(), &impostor);
 }
 
 #[test]
@@ -224,7 +227,7 @@ fn test_refund_rejected_before_shipping_deadline() {
         "MacBook Air M3",
     );
 
-    f.client.claim_refund(&f.default_deal_id(), &f.buyer, &f.usdc);
+    f.client.claim_refund(&f.default_deal_id(), &f.buyer);
 }
 
 #[test]
@@ -241,7 +244,7 @@ fn test_seller_claim_rejected_before_confirm_deadline() {
     );
     f.client.mark_shipped(&f.default_deal_id(), &f.seller);
 
-    f.client.claim_seller_timeout(&f.default_deal_id(), &f.seller, &f.usdc);
+    f.client.claim_seller_timeout(&f.default_deal_id(), &f.seller);
 }
 
 #[test]
@@ -267,4 +270,35 @@ fn test_duplicate_deal_id_rejected() {
         f.buyer_confirm_window(),
         "Duplicate Attempt",
     );
+}
+
+#[test]
+fn test_confirm_receipt_uses_pinned_escrow_token_only() {
+    let f = Fixture::new(900_0000000);
+    let amount = 900_0000000_i128;
+    let deal_id = f.default_deal_id();
+
+    f.create_and_fund(
+        deal_id,
+        amount,
+        f.ship_deadline(),
+        f.buyer_confirm_window(),
+        "Canon EOS R50",
+    );
+
+    let alt_admin = Address::generate(&f.env);
+    let alt_token = f.env.register_stellar_asset_contract_v2(alt_admin);
+    let alt = alt_token.address();
+    let alt_client = TokenClient::new(&f.env, &alt);
+    let alt_asset = StellarAssetClient::new(&f.env, &alt);
+
+    alt_asset.mint(&f.seller, &amount);
+    alt_client.transfer(&f.seller, &f.contract_id, &amount);
+
+    f.client.mark_shipped(&deal_id, &f.seller);
+    f.client.confirm_receipt(&deal_id, &f.buyer);
+
+    assert_eq!(f.token().balance(&f.seller), amount);
+    assert_eq!(alt_client.balance(&f.seller), 0);
+    assert_eq!(alt_client.balance(&f.contract_id), amount);
 }
