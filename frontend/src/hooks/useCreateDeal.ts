@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { buildCreateDeal, getCurrentLedger, LEDGERS_PER_DAY, xlmToStroops } from '@/lib/soroban/contract'
+import { ESCROW_ASSET_CONTRACT_ID } from '@/lib/soroban/client'
 import { generateDealId } from '@/lib/utils'
 import { useFreighter } from './useFreighter'
 import type { CreateDealFormValues } from '@/lib/soroban/types'
@@ -29,6 +30,7 @@ export function useCreateDeal(): UseCreateDealResult {
       const unsignedXdr = await buildCreateDeal({
         dealId,
         seller: address,
+        escrowToken: ESCROW_ASSET_CONTRACT_ID,
         amountStroops: xlmToStroops(values.amountXlm),
         shipDeadlineLedger,
         buyerConfirmWindowLedgers,

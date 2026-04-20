@@ -10,6 +10,7 @@ export interface Deal {
   deal_id: bigint
   seller: string
   buyer: string | null
+  escrow_token: string | null
   amount: bigint
   ship_deadline_ledger: number
   buyer_confirm_window_ledgers: number

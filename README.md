@@ -1,6 +1,6 @@
 # SwapProof 🔒
 
-> Trustless P2P escrow for informal marketplace transactions — buyer locks funds on Stellar, seller ships, funds release on confirmation or timeout. No arbiter. No platform. Just two wallets and a contract.
+> Trustless P2P escrow for informal marketplace transactions — buyer locks funds on Stellar, seller ships, funds release on confirmation or timeout. No arbiter. No platform. Just two wallets and a contract. Each deal pins a seller-approved escrow asset on-chain so payout logic cannot be redirected later.
 
 ---
 
@@ -8,7 +8,8 @@
 
 **SwapProof**
 🔗 https://swap-proof-stellar-ten.vercel.app/
-🔗 https://lab.stellar.org/r/testnet/contract/CCQQHOKWDLFKW34T3QFSFHTX4KLXSBI7S3OMDCFUAJQKBFVHGJK6HE6H
+🔗 https://stellar.expert/explorer/testnet/tx/82e8a12e5e92a431b8bfd8d66363d151c445038c69905484e7ac3979a462085d
+🔗 https://lab.stellar.org/r/testnet/contract/CDCFFRWODNDSRTFWQAIXON22G7JYLVQW5UUQKE4YBMNAKDTVDQ2OUSPU
 
 ---
 
@@ -28,7 +29,7 @@ SwapProof locks the buyer's XLM in a Soroban smart contract the moment they open
 
 | Feature | Usage |
 |---|---|
-| **Soroban smart contracts** | Core escrow logic with 7 functions and 6 deal states |
+| **Soroban smart contracts** | Core escrow logic with 7 functions and 6 deal states, with escrow token pinned per deal |
 | **XLM transfers (Native)** | Escrow token; stable value, no volatility during deal window |
 | **On-chain events** | `created`, `funded`, `shipped`, `complete`, `refund`, `sellerclm` — full audit trail |
 | **Ledger-based timing** | Deadlines calculated in ledger sequences (~5-6 seconds each) |
@@ -54,13 +55,14 @@ SwapProof locks the buyer's XLM in a Soroban smart contract the moment they open
 
 ```
 Seller creates deal (item, price, timeout)
-  → create_deal() stored on-chain, buyer: null
+  → create_deal() stored on-chain with seller-approved escrow token, buyer: null
   → Shareable link generated: /deal/{deal_id}
 
 Seller pastes link into Facebook Messenger chat
 
 Buyer opens link, connects Freighter wallet, reviews terms
-  → fund_deal() locks XLM in contract, binds buyer address on-chain
+  → fund_deal() must match the escrow token already pinned by the seller
+  → buyer address is bound on-chain
   → Deal status: FUNDED
 
 Seller ships item, marks as shipped on-chain
@@ -147,15 +149,17 @@ Seller taps Claim Payment
 
 | Function | Caller | What it does |
 |---|---|---|
-| `create_deal` | Seller | Registers deal with no buyer assigned; emits `created` event |
-| `fund_deal` | Buyer | Locks XLM in escrow; binds buyer address on-chain; emits `funded` event |
+| `create_deal` | Seller | Registers deal with no buyer assigned and pins the seller-approved escrow token; emits `created` event |
+| `fund_deal` | Buyer | Locks the pinned escrow asset in escrow; binds buyer address on-chain; emits `funded` event |
 | `mark_shipped` | Seller only | Records shipment on-chain; starts buyer confirmation window; emits `shipped` event |
-| `confirm_receipt` | Buyer only | Releases XLM to seller; closes deal; emits `complete` event |
-| `claim_refund` | Buyer only | Claims XLM back after seller misses shipping deadline; emits `refund` event |
-| `claim_seller_timeout` | Seller only | Claims XLM after buyer misses confirmation deadline; emits `sellerclm` event |
+| `confirm_receipt` | Buyer only | Releases the deal's pinned escrow token to seller; closes deal; emits `complete` event |
+| `claim_refund` | Buyer only | Returns the deal's pinned escrow token after seller misses shipping deadline; emits `refund` event |
+| `claim_seller_timeout` | Seller only | Claims the deal's pinned escrow token after buyer misses confirmation deadline; emits `sellerclm` event |
 | `get_deal` | Anyone | Read-only; returns full deal state — source of truth |
 
 Contract state is the authoritative source of truth for fund status. Off-chain systems may cache for UX but must not decide fund movement.
+
+The deal record now stores the escrow asset at creation time and settlement/refund actions always use that stored token instead of accepting a new token address from the caller.
 
 ---
 
@@ -210,7 +214,8 @@ cargo test
 # test tests::test_refund_rejected_before_shipping_deadline ... ok
 # test tests::test_seller_claim_rejected_before_confirm_deadline ... ok
 # test tests::test_duplicate_deal_id_rejected ... ok
-# test result: ok. 8 passed; 0 failed
+# test tests::test_confirm_receipt_uses_pinned_escrow_token_only ... ok
+# test result: ok. 9 passed; 0 failed
 ```
 
 ## Frontend Setup
