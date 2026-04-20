@@ -54,7 +54,7 @@ SwapProof locks the buyer's XLM in a Soroban smart contract the moment they open
 **The escrow loop — demo-able in under 2 minutes:**
 
 ```
-Seller creates deal (item, price, timeout)
+Seller creates deal (item, price, shipping window, buyer review window)
   → create_deal() stored on-chain with seller-approved escrow token, buyer: null
   → Shareable link generated: /deal/{deal_id}
 
@@ -120,6 +120,7 @@ Seller taps Claim Payment
 
 ### Recent Features
 - **AI Title Optimizer** - Uses Google Gemini AI to suggest optimized product titles for better searchability
+- **Custom Time Windows** - Sellers can pick preset or custom shipping/review windows (with validation bounds)
 - **Enhanced Deadline Display** - Shows exact expiration dates/times (e.g., "Expires May 5 at 2:30 PM · 3d 4h remaining")
 - **Real-time Ledger Polling** - Updates deal status every 15 seconds
 - **Mobile-First Design** - Responsive UI built with Tailwind CSS and Radix UI

@@ -27,6 +27,11 @@ export interface CreateDealFormValues {
   buyerConfirmDays: number
 }
 
+export const SHIP_WINDOW_MIN_DAYS = 1
+export const SHIP_WINDOW_MAX_DAYS = 30
+export const BUYER_REVIEW_MIN_DAYS = 1
+export const BUYER_REVIEW_MAX_DAYS = 14
+
 export interface DealPageParams {
   dealId: string
 }

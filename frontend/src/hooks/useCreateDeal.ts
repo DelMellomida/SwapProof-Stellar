@@ -3,7 +3,13 @@ import { buildCreateDeal, getCurrentLedger, LEDGERS_PER_DAY, xlmToStroops } from
 import { ESCROW_ASSET_CONTRACT_ID } from '@/lib/soroban/client'
 import { generateDealId } from '@/lib/utils'
 import { useFreighter } from './useFreighter'
-import type { CreateDealFormValues } from '@/lib/soroban/types'
+import {
+  BUYER_REVIEW_MAX_DAYS,
+  BUYER_REVIEW_MIN_DAYS,
+  SHIP_WINDOW_MAX_DAYS,
+  SHIP_WINDOW_MIN_DAYS,
+  type CreateDealFormValues,
+} from '@/lib/soroban/types'
 
 interface UseCreateDealResult {
   createDeal: (values: CreateDealFormValues) => Promise<{ dealId: bigint; txHash: string }>
@@ -18,6 +24,23 @@ export function useCreateDeal(): UseCreateDealResult {
 
   const createDeal = async (values: CreateDealFormValues) => {
     if (!address) throw new Error('Wallet not connected.')
+
+    if (!Number.isInteger(values.shipWindowDays)) {
+      throw new Error('Shipping window must be a whole number of days.')
+    }
+
+    if (values.shipWindowDays < SHIP_WINDOW_MIN_DAYS || values.shipWindowDays > SHIP_WINDOW_MAX_DAYS) {
+      throw new Error(`Shipping window must be between ${SHIP_WINDOW_MIN_DAYS} and ${SHIP_WINDOW_MAX_DAYS} days.`)
+    }
+
+    if (!Number.isInteger(values.buyerConfirmDays)) {
+      throw new Error('Buyer review window must be a whole number of days.')
+    }
+
+    if (values.buyerConfirmDays < BUYER_REVIEW_MIN_DAYS || values.buyerConfirmDays > BUYER_REVIEW_MAX_DAYS) {
+      throw new Error(`Buyer review window must be between ${BUYER_REVIEW_MIN_DAYS} and ${BUYER_REVIEW_MAX_DAYS} days.`)
+    }
+
     setLoading(true)
     setError(null)
 

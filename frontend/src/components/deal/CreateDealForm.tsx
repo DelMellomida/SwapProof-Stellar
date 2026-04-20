@@ -4,10 +4,18 @@ import { Loader2, ShieldCheck, Sparkles, Check, X } from 'lucide-react'
 import { useCreateDeal } from '@/hooks/useCreateDeal'
 import { useAiOptimizeTitle } from '@/hooks/useAiOptimizeTitle'
 import { cn } from '@/lib/utils'
-import type { CreateDealFormValues } from '@/lib/soroban/types'
+import {
+  BUYER_REVIEW_MAX_DAYS,
+  BUYER_REVIEW_MIN_DAYS,
+  SHIP_WINDOW_MAX_DAYS,
+  SHIP_WINDOW_MIN_DAYS,
+  type CreateDealFormValues,
+} from '@/lib/soroban/types'
 
-const SHIP_WINDOW_OPTIONS = [1, 2, 3, 5, 7, 14]
-const BUYER_CONFIRM_OPTIONS = [1, 2, 3, 5, 7]
+const SHIP_WINDOW_PRESETS = [1, 2, 3, 5, 7, 14]
+const BUYER_CONFIRM_PRESETS = [1, 2, 3, 5, 7]
+
+type WindowMode = 'preset' | 'custom'
 
 export function CreateDealForm() {
   const navigate = useNavigate()
@@ -20,6 +28,8 @@ export function CreateDealForm() {
     shipWindowDays: 3,
     buyerConfirmDays: 2,
   })
+  const [shipWindowMode, setShipWindowMode] = useState<WindowMode>('preset')
+  const [buyerReviewMode, setBuyerReviewMode] = useState<WindowMode>('preset')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -31,11 +41,21 @@ export function CreateDealForm() {
     }
   }
 
+  const shipWindowValid =
+    Number.isInteger(values.shipWindowDays) &&
+    values.shipWindowDays >= SHIP_WINDOW_MIN_DAYS &&
+    values.shipWindowDays <= SHIP_WINDOW_MAX_DAYS
+
+  const buyerReviewValid =
+    Number.isInteger(values.buyerConfirmDays) &&
+    values.buyerConfirmDays >= BUYER_REVIEW_MIN_DAYS &&
+    values.buyerConfirmDays <= BUYER_REVIEW_MAX_DAYS
+
   const isValid =
     values.itemName.trim().length >= 3 &&
     values.amountXlm > 0 &&
-    values.shipWindowDays > 0 &&
-    values.buyerConfirmDays > 0
+    shipWindowValid &&
+    buyerReviewValid
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
@@ -169,15 +189,18 @@ export function CreateDealForm() {
         <p className="text-xs text-muted-foreground font-sans">
           The seller must mark the item as shipped within this window after the buyer funds the deal.
         </p>
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-          {SHIP_WINDOW_OPTIONS.map((days) => (
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-7">
+          {SHIP_WINDOW_PRESETS.map((days) => (
             <button
               key={days}
               type="button"
-              onClick={() => setValues((v) => ({ ...v, shipWindowDays: days }))}
+              onClick={() => {
+                setShipWindowMode('preset')
+                setValues((v) => ({ ...v, shipWindowDays: days }))
+              }}
               className={cn(
                 'rounded-lg border py-2 text-sm font-display transition-all',
-                values.shipWindowDays === days
+                shipWindowMode === 'preset' && values.shipWindowDays === days
                   ? 'border-primary/60 bg-primary/10 text-primary glow-teal-sm'
                   : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/30',
               )}
@@ -185,7 +208,48 @@ export function CreateDealForm() {
               {days}d
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setShipWindowMode('custom')}
+            className={cn(
+              'rounded-lg border py-2 text-sm font-display transition-all',
+              shipWindowMode === 'custom'
+                ? 'border-primary/60 bg-primary/10 text-primary glow-teal-sm'
+                : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/30',
+            )}
+          >
+            Custom
+          </button>
         </div>
+
+        {shipWindowMode === 'custom' && (
+          <div className="space-y-2">
+            <input
+              type="number"
+              min={SHIP_WINDOW_MIN_DAYS}
+              max={SHIP_WINDOW_MAX_DAYS}
+              step={1}
+              value={values.shipWindowDays || ''}
+              onChange={(e) =>
+                setValues((v) => ({ ...v, shipWindowDays: Number.parseInt(e.target.value, 10) || 0 }))
+              }
+              className={cn(
+                'w-full rounded-lg border border-border bg-muted/40 px-4 py-3',
+                'font-sans text-sm text-foreground placeholder:text-muted-foreground/50',
+                'focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all',
+              )}
+              placeholder={`Enter ${SHIP_WINDOW_MIN_DAYS}-${SHIP_WINDOW_MAX_DAYS} days`}
+            />
+            <p className="text-xs text-muted-foreground font-sans">
+              Set any whole number from {SHIP_WINDOW_MIN_DAYS} to {SHIP_WINDOW_MAX_DAYS} days.
+            </p>
+            {!shipWindowValid && (
+              <p className="text-xs text-destructive font-sans">
+                Shipping window must be a whole number between {SHIP_WINDOW_MIN_DAYS} and {SHIP_WINDOW_MAX_DAYS}.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="space-y-3">
@@ -195,15 +259,18 @@ export function CreateDealForm() {
         <p className="text-xs text-muted-foreground font-sans">
           After the seller marks shipped, the buyer has this many days to confirm receipt before the seller can claim.
         </p>
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-          {BUYER_CONFIRM_OPTIONS.map((days) => (
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+          {BUYER_CONFIRM_PRESETS.map((days) => (
             <button
               key={days}
               type="button"
-              onClick={() => setValues((v) => ({ ...v, buyerConfirmDays: days }))}
+              onClick={() => {
+                setBuyerReviewMode('preset')
+                setValues((v) => ({ ...v, buyerConfirmDays: days }))
+              }}
               className={cn(
                 'rounded-lg border py-2 text-sm font-display transition-all',
-                values.buyerConfirmDays === days
+                buyerReviewMode === 'preset' && values.buyerConfirmDays === days
                   ? 'border-primary/60 bg-primary/10 text-primary glow-teal-sm'
                   : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/30',
               )}
@@ -211,7 +278,48 @@ export function CreateDealForm() {
               {days}d
             </button>
           ))}
+          <button
+            type="button"
+            onClick={() => setBuyerReviewMode('custom')}
+            className={cn(
+              'rounded-lg border py-2 text-sm font-display transition-all',
+              buyerReviewMode === 'custom'
+                ? 'border-primary/60 bg-primary/10 text-primary glow-teal-sm'
+                : 'border-border bg-muted/30 text-muted-foreground hover:border-primary/30',
+            )}
+          >
+            Custom
+          </button>
         </div>
+
+        {buyerReviewMode === 'custom' && (
+          <div className="space-y-2">
+            <input
+              type="number"
+              min={BUYER_REVIEW_MIN_DAYS}
+              max={BUYER_REVIEW_MAX_DAYS}
+              step={1}
+              value={values.buyerConfirmDays || ''}
+              onChange={(e) =>
+                setValues((v) => ({ ...v, buyerConfirmDays: Number.parseInt(e.target.value, 10) || 0 }))
+              }
+              className={cn(
+                'w-full rounded-lg border border-border bg-muted/40 px-4 py-3',
+                'font-sans text-sm text-foreground placeholder:text-muted-foreground/50',
+                'focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary/50 transition-all',
+              )}
+              placeholder={`Enter ${BUYER_REVIEW_MIN_DAYS}-${BUYER_REVIEW_MAX_DAYS} days`}
+            />
+            <p className="text-xs text-muted-foreground font-sans">
+              Set any whole number from {BUYER_REVIEW_MIN_DAYS} to {BUYER_REVIEW_MAX_DAYS} days.
+            </p>
+            {!buyerReviewValid && (
+              <p className="text-xs text-destructive font-sans">
+                Buyer review window must be a whole number between {BUYER_REVIEW_MIN_DAYS} and {BUYER_REVIEW_MAX_DAYS}.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {error && (
