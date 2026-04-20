@@ -28,9 +28,12 @@ SwapProof locks the buyer's XLM in a Soroban smart contract the moment they open
 
 | Feature | Usage |
 |---|---|
-| **Soroban smart contracts** | Core escrow logic — deal creation, fund locking, release, timeout claim |
-| **XLM transfers (Native)** | Escrow token; stable value, no volatility during the deal window |
-| **On-chain events** | `created`, `funded`, `completed`, `timed_out` — full public audit trail |
+| **Soroban smart contracts** | Core escrow logic with 7 functions and 6 deal states |
+| **XLM transfers (Native)** | Escrow token; stable value, no volatility during deal window |
+| **On-chain events** | `created`, `funded`, `shipped`, `complete`, `refund`, `sellerclm` — full audit trail |
+| **Ledger-based timing** | Deadlines calculated in ledger sequences (~5-6 seconds each) |
+| **Persistent storage** | Deal state stored permanently on-chain |
+| **Multi-party authorization** | Separate auth for seller/buyer actions with state validation |
 
 ---
 
@@ -60,25 +63,39 @@ Buyer opens link, connects Freighter wallet, reviews terms
   → fund_deal() locks XLM in contract, binds buyer address on-chain
   → Deal status: FUNDED
 
+Seller ships item, marks as shipped on-chain
+  → mark_shipped() records shipment, starts buyer confirmation window
+  → Deal status: SHIPPED
+
 Buyer receives item, taps Confirm Receipt
   → confirm_receipt() transfers XLM to seller
   → Deal status: COMPLETED ✅
 
-  OR
+  OR (if seller misses shipping deadline)
 
-Buyer ghosts past timeout window
-  → Seller taps Claim Payment
-  → claim_timeout() transfers XLM to seller
-  → Deal status: COMPLETED (TIMEOUT) ✅
+Buyer taps Claim Refund
+  → claim_refund() returns XLM to buyer
+  → Deal status: REFUNDED ✅
+
+  OR (if buyer misses confirmation deadline)
+
+Seller taps Claim Payment
+  → claim_seller_timeout() transfers XLM to seller
+  → Deal status: SELLER_CLAIMED ✅
 ```
 
 ---
 
-## Why This Wins
+## Deal States
 
-SwapProof targets the single most common trust failure in SEA informal commerce — the take-the-money-and-disappear scam — with a two-minute demo-able flow that requires no crypto knowledge from the buyer, costs near-zero in fees on Stellar, and is composable with any future courier oracle or reputation layer. Judges see a real user, a real pain, and a contract that actually moves money.
-
----
+| Status | Description |
+|---|---|
+| `PendingPayment` | Deal created, waiting for buyer to fund escrow |
+| `FundedAwaitingShipment` | Buyer locked funds, seller must mark shipped before deadline |
+| `ShippedAwaitingReceipt` | Item shipped, buyer must confirm receipt before deadline |
+| `Completed` | Buyer confirmed receipt, funds released to seller |
+| `Refunded` | Seller missed shipping deadline, buyer reclaimed funds |
+| `SellerClaimed` | Buyer missed confirmation deadline, seller claimed funds |
 
 ## Optional Edge
 
@@ -86,18 +103,34 @@ SwapProof targets the single most common trust failure in SEA informal commerce 
 
 ---
 
-## Recent Features
+## Frontend Features
 
-### AI Title Optimizer
-- Uses Google Gemini AI to suggest optimized product titles
-- Click "Optimize" button on Create Deal form
-- AI improves searchability (e.g., "old phone" → "iPhone 11 128GB Space Gray - Excellent Condition")
-- Requires: `VITE_GEMINI_API_KEY` in `frontend/.env.local`
+### Core Pages
+- **HomePage** - Landing page with hero, pillars, and how-it-works flow
+- **CreateDealPage** - Form to create new escrow deals with wallet connection
+- **DealPage** - Shareable deal link with real-time status tracking
 
-### Enhanced Deadline Display
-- Shows exact expiration dates and times (e.g., "Expires May 5 at 2:30 PM · 3d 4h remaining")
-- Real-time countdown timers on deal cards
-- Better UX for tracking shipping & buyer review windows
+### Key Components
+- **DealCard** - Displays deal details, status, and countdown timers
+- **CreateDealForm** - Multi-step form with validation and AI title optimization
+- **DealActions** - Context-aware buttons (Fund, Mark Shipped, Confirm Receipt, Claim)
+- **Wallet Integration** - Freighter wallet connection and transaction signing
+
+### Recent Features
+- **AI Title Optimizer** - Uses Google Gemini AI to suggest optimized product titles for better searchability
+- **Enhanced Deadline Display** - Shows exact expiration dates/times (e.g., "Expires May 5 at 2:30 PM · 3d 4h remaining")
+- **Real-time Ledger Polling** - Updates deal status every 15 seconds
+- **Mobile-First Design** - Responsive UI built with Tailwind CSS and Radix UI
+
+### Tech Stack
+- **React 18** with TypeScript
+- **Vite** for build tooling
+- **React Router** for navigation
+- **Zustand** for state management
+- **Stellar SDK** for blockchain interactions
+- **Tailwind CSS** + **Radix UI** for styling
+- **date-fns** for date formatting
+- **Sonner** for toast notifications
 
 ---
 
@@ -114,10 +147,12 @@ SwapProof targets the single most common trust failure in SEA informal commerce 
 
 | Function | Caller | What it does |
 |---|---|---|
-| `create_deal` | Seller | Registers deal with no buyer assigned; emits `created` |
-| `fund_deal` | Buyer | Locks XLM; binds buyer address on-chain; emits `funded` |
-| `confirm_receipt` | Buyer only | Releases XLM to seller; closes deal |
-| `claim_timeout` | Seller only | Claims XLM after timeout passes; closes deal |
+| `create_deal` | Seller | Registers deal with no buyer assigned; emits `created` event |
+| `fund_deal` | Buyer | Locks XLM in escrow; binds buyer address on-chain; emits `funded` event |
+| `mark_shipped` | Seller only | Records shipment on-chain; starts buyer confirmation window; emits `shipped` event |
+| `confirm_receipt` | Buyer only | Releases XLM to seller; closes deal; emits `complete` event |
+| `claim_refund` | Buyer only | Claims XLM back after seller misses shipping deadline; emits `refund` event |
+| `claim_seller_timeout` | Seller only | Claims XLM after buyer misses confirmation deadline; emits `sellerclm` event |
 | `get_deal` | Anyone | Read-only; returns full deal state — source of truth |
 
 Contract state is the authoritative source of truth for fund status. Off-chain systems may cache for UX but must not decide fund movement.
@@ -126,6 +161,7 @@ Contract state is the authoritative source of truth for fund status. Off-chain s
 
 ## Prerequisites
 
+### Contract Development
 ```bash
 # Rust + wasm target
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -135,6 +171,18 @@ rustup target add wasm32-unknown-unknown
 cargo install --locked stellar-cli --features opt
 
 stellar --version  # should print 21.x.x or higher
+```
+
+### Frontend Development
+```bash
+# Node.js 18+
+node --version  # should print 18.x.x or higher
+
+# pnpm package manager
+npm install -g pnpm
+
+# Google Gemini API key (optional, for AI features)
+# Get from: https://aistudio.google.com/app/apikey
 ```
 
 ---
@@ -154,13 +202,43 @@ stellar contract build
 cargo test
 
 # Expected:
-# test tests::test_happy_path_confirm_receipt ... ok
-# test tests::test_timeout_claim_by_seller ... ok
-# test tests::test_duplicate_deal_rejected ... ok
-# test tests::test_unauthorized_confirm_rejected ... ok
-# test tests::test_early_timeout_claim_rejected ... ok
-# test result: ok. 5 passed; 0 failed
+# test tests::test_happy_path_ship_then_confirm ... ok
+# test tests::test_buyer_can_refund_after_missed_shipping_deadline ... ok
+# test tests::test_seller_can_claim_after_shipping_and_buyer_inactivity ... ok
+# test tests::test_confirm_receipt_rejected_for_non_buyer ... ok
+# test tests::test_non_seller_cannot_mark_shipped ... ok
+# test tests::test_refund_rejected_before_shipping_deadline ... ok
+# test tests::test_seller_claim_rejected_before_confirm_deadline ... ok
+# test tests::test_duplicate_deal_id_rejected ... ok
+# test result: ok. 8 passed; 0 failed
 ```
+
+## Frontend Setup
+
+```bash
+cd frontend
+
+# Install dependencies
+pnpm install
+
+# Copy environment template
+cp .env.local.example .env.local
+
+# Add your Gemini API key to .env.local
+echo "VITE_GEMINI_API_KEY=your-api-key-here" >> .env.local
+
+# Start development server
+pnpm dev
+
+# Build for production
+pnpm build
+```
+
+### Environment Variables
+- `VITE_GEMINI_API_KEY` - Google Gemini API key for AI title optimization (optional)
+
+### Deployment
+The frontend is configured for Vercel deployment with SPA routing.
 
 ---
 
@@ -205,10 +283,11 @@ stellar contract invoke \
   --source seller_wallet \
   --network testnet \
   -- create_deal \
-  --deal_id   "deal_abc123" \
-  --seller    <SELLER_G...> \
-  --amount    15000000 \
-  --timeout   1000 \
+  --deal_id 123 \
+  --seller <SELLER_G...> \
+  --amount 15000000 \
+  --ship_deadline_ledger 1000 \
+  --buyer_confirm_window_ledgers 200 \
   --item_name "iPhone 11 64GB Space Gray"
 ```
 
@@ -219,7 +298,33 @@ stellar contract invoke \
   --source buyer_wallet \
   --network testnet \
   -- fund_deal \
-  --deal_id <DEAL_ID> \
+  --deal_id 123 \
+  --buyer <BUYER_G...> \
+  --token_address <XLM_CONTRACT_ID>
+```
+
+### `mark_shipped` — Seller records shipment on-chain
+```bash
+stellar contract invoke \
+  --id <CONTRACT_ID> \
+  --source seller_wallet \
+  --network testnet \
+  -- mark_shipped \
+  --deal_id 123 \
+  --seller <SELLER_G...>
+```
+
+### `confirm_receipt` — Buyer confirms delivery and releases funds
+```bash
+stellar contract invoke \
+  --id <CONTRACT_ID> \
+  --source buyer_wallet \
+  --network testnet \
+  -- confirm_receipt \
+  --deal_id 123 \
+  --buyer <BUYER_G...> \
+  --token_address <XLM_CONTRACT_ID>
+```
   --buyer   <BUYER_G...>
 ```
 
