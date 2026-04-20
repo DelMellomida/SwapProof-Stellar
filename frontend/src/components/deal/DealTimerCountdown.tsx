@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Clock } from 'lucide-react'
-import { formatTimeout, isTimeoutPassed } from '@/lib/utils'
+import { formatDeadlineWithTime, isTimeoutPassed } from '@/lib/utils'
 import { getCurrentLedger } from '@/lib/soroban/contract'
 import { cn } from '@/lib/utils'
 
@@ -51,7 +51,7 @@ export function DealTimerCountdown({
         setDisplayStr(passedLabel)
         onExpire?.()
       } else {
-        setDisplayStr(formatTimeout(deadlineLedger, currentLedger))
+        setDisplayStr(formatDeadlineWithTime(deadlineLedger, currentLedger))
       }
     }
 
