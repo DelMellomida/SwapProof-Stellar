@@ -76,12 +76,28 @@ Respond with ONLY the optimized title, no explanation or quotes.`
     }
 
     const optimizedTitle = data.candidates[0].content.parts[0].text.trim().replace(/^"|"$/g, '')
+    const safeTitle = enforceMaxTitleLength(optimizedTitle, 80)
 
-    return optimizedTitle
+    if (!safeTitle) {
+      throw new Error('Gemini returned an invalid title')
+    }
+
+    return safeTitle
   } catch (error) {
     if (error instanceof Error) {
       throw error
     }
     throw new Error('Failed to optimize title with AI')
   }
+}
+
+function enforceMaxTitleLength(title: string, maxLength: number): string {
+  const normalized = title.trim()
+  if (normalized.length <= maxLength) {
+    return normalized
+  }
+
+  const truncated = normalized.slice(0, maxLength)
+  const lastSpace = truncated.lastIndexOf(' ')
+  return lastSpace > 0 ? truncated.slice(0, lastSpace).trim() : truncated.trim()
 }

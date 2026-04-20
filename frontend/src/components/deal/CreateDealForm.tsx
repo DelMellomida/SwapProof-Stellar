@@ -12,7 +12,7 @@ const BUYER_CONFIRM_OPTIONS = [1, 2, 3, 5, 7]
 export function CreateDealForm() {
   const navigate = useNavigate()
   const { createDeal, loading, error } = useCreateDeal()
-  const { suggestion, loading: aiLoading, error: aiError, optimizeTitle, clearSuggestion, acceptSuggestion } = useAiOptimizeTitle()
+  const { suggestion, loading: aiLoading, error: aiError, optimizeTitle, clearSuggestion } = useAiOptimizeTitle()
 
   const [values, setValues] = useState<CreateDealFormValues>({
     itemName: '',
@@ -98,7 +98,7 @@ export function CreateDealForm() {
               <button
                 type="button"
                 onClick={() => {
-                  setValues((v) => ({ ...v, itemName: suggestion }))
+                  setValues((v) => ({ ...v, itemName: suggestion.slice(0, 80) }))
                   clearSuggestion()
                 }}
                 className={cn(

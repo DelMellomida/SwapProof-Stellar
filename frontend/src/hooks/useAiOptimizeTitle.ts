@@ -7,7 +7,6 @@ export interface UseAiOptimizeTitleReturn {
   error: string | null
   optimizeTitle: (itemTitle: string) => Promise<void>
   clearSuggestion: () => void
-  acceptSuggestion: (title: string) => void
 }
 
 /**
@@ -41,17 +40,11 @@ export function useAiOptimizeTitle(): UseAiOptimizeTitleReturn {
     setError(null)
   }
 
-  const acceptSuggestion = (title: string) => {
-    setSuggestion(null)
-    setError(null)
-  }
-
   return {
     suggestion,
     loading,
     error,
     optimizeTitle,
     clearSuggestion,
-    acceptSuggestion,
   }
 }
