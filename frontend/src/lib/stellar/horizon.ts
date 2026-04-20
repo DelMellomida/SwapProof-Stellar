@@ -41,12 +41,12 @@ async function fetchWithTimeout(url: string): Promise<Response> {
   }
 }
 
-function toDaysSince(dateIso: string): number {
+function toDaysSince(dateIso: string): number | null {
   const createdAtMs = Date.parse(dateIso)
   const nowMs = Date.now()
 
   if (Number.isNaN(createdAtMs)) {
-    return 0
+    return null
   }
 
   return Math.max(0, Math.floor((nowMs - createdAtMs) / (1000 * 60 * 60 * 24)))
