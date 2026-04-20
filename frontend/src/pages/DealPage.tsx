@@ -84,7 +84,7 @@ export function DealPage() {
   const isBuyer = !!walletAddress && deal?.buyer === walletAddress
   const viewerRole = isSeller ? 'seller' : isBuyer ? 'buyer' : 'visitor'
 
-  const showPendingCredibility = !!deal && deal.status === 'PendingPayment' && !isSeller
+  const showPendingCredibility = !!deal && deal.status === 'PendingPayment' && !!walletAddress && !isSeller
   const showActiveBuyerCredibility =
     !!deal &&
     isBuyer &&
