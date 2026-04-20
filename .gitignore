@@ -9,3 +9,6 @@ SwapProof_MVP_Epic_UserStories.docx
 
 /.pnpm-store/
 /frontend/dist/
+
+/frontend/.env.local
+**/.env.local
