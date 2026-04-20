@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   generateSellerCredibilitySummary,
   isGeminiConfigured,
@@ -21,6 +21,7 @@ export interface SellerCredibilityData {
 
 interface UseAiSellerCredibilityParams {
   enabled: boolean
+  dealId: string | null
   sellerAddress: string | null
   dealStatus: DealStatus | null
   itemName: string | null
@@ -33,6 +34,47 @@ interface UseAiSellerCredibilityResult {
   data: SellerCredibilityData | null
   loading: boolean
   retry: () => void
+}
+
+const CREDIBILITY_CACHE_PREFIX = 'seller-credibility:'
+const CREDIBILITY_CACHE_TTL_MS = 10 * 60 * 1000
+
+interface SellerCredibilityCacheEntry {
+  savedAt: number
+  data: SellerCredibilityData
+}
+
+function readCachedCredibility(contextKey: string): SellerCredibilityData | null {
+  try {
+    const raw = window.sessionStorage.getItem(`${CREDIBILITY_CACHE_PREFIX}${contextKey}`)
+    if (!raw) return null
+
+    const parsed = JSON.parse(raw) as SellerCredibilityCacheEntry
+    if (!parsed || typeof parsed.savedAt !== 'number' || !parsed.data) {
+      return null
+    }
+
+    if (Date.now() - parsed.savedAt > CREDIBILITY_CACHE_TTL_MS) {
+      window.sessionStorage.removeItem(`${CREDIBILITY_CACHE_PREFIX}${contextKey}`)
+      return null
+    }
+
+    return parsed.data
+  } catch {
+    return null
+  }
+}
+
+function writeCachedCredibility(contextKey: string, data: SellerCredibilityData): void {
+  try {
+    const payload: SellerCredibilityCacheEntry = {
+      savedAt: Date.now(),
+      data,
+    }
+    window.sessionStorage.setItem(`${CREDIBILITY_CACHE_PREFIX}${contextKey}`, JSON.stringify(payload))
+  } catch {
+    // Cache write failures should never block credibility rendering.
+  }
 }
 
 function clampScore(score: number): number {
@@ -110,6 +152,12 @@ function buildDeterministicSignals(params: {
     reasons.push(`Shipping urgency: ${shippingUrgency}`)
   }
 
+  if (dealStatus === 'PendingPayment') {
+    score -= 2
+    reasons.push('This deal is not funded yet, so there is no buyer lock signal on-chain.')
+    reasons.push(`Shipping urgency once funded: ${shippingUrgency}`)
+  }
+
   return {
     score: clampScore(score),
     reasons,
@@ -123,6 +171,7 @@ function buildFallbackSummary(tierLabel: string, reasons: string[]): string {
 
 export function useAiSellerCredibility({
   enabled,
+  dealId,
   sellerAddress,
   dealStatus,
   itemName,
@@ -133,6 +182,8 @@ export function useAiSellerCredibility({
   const [data, setData] = useState<SellerCredibilityData | null>(null)
   const [loading, setLoading] = useState(false)
   const [requestNonce, setRequestNonce] = useState(0)
+  const lastGeneratedContextKeyRef = useRef<string | null>(null)
+  const lastHandledRequestNonceRef = useRef<number>(-1)
 
   const retry = useCallback(() => {
     setRequestNonce((prev) => prev + 1)
@@ -143,7 +194,11 @@ export function useAiSellerCredibility({
       return null
     }
 
-    if (dealStatus !== 'FundedAwaitingShipment' && dealStatus !== 'ShippedAwaitingReceipt') {
+    if (
+      dealStatus !== 'PendingPayment' &&
+      dealStatus !== 'FundedAwaitingShipment' &&
+      dealStatus !== 'ShippedAwaitingReceipt'
+    ) {
       return null
     }
 
@@ -166,11 +221,38 @@ export function useAiSellerCredibility({
     buyerReviewUrgency,
   ])
 
+  const generationContextKey = useMemo(() => {
+    if (!aiInput || !dealId) {
+      return null
+    }
+
+    // Keep analysis sticky for the same deal across status transitions.
+    return `deal:${dealId}`
+  }, [aiInput, dealId])
+
   useEffect(() => {
-    if (!enabled || !aiInput) {
+    if (!enabled || !aiInput || !generationContextKey) {
       setData(null)
       setLoading(false)
       return
+    }
+
+    const alreadyGeneratedForContext = lastGeneratedContextKeyRef.current === generationContextKey
+    const alreadyHandledCurrentNonce = lastHandledRequestNonceRef.current === requestNonce
+
+    if (alreadyGeneratedForContext && alreadyHandledCurrentNonce) {
+      return
+    }
+
+    if (!alreadyGeneratedForContext && requestNonce === 0) {
+      const cached = readCachedCredibility(generationContextKey)
+      if (cached) {
+        lastGeneratedContextKeyRef.current = generationContextKey
+        lastHandledRequestNonceRef.current = requestNonce
+        setData(cached)
+        setLoading(false)
+        return
+      }
     }
 
     let cancelled = false
@@ -217,7 +299,20 @@ export function useAiSellerCredibility({
 
         if (cancelled) return
 
+        lastGeneratedContextKeyRef.current = generationContextKey
+        lastHandledRequestNonceRef.current = requestNonce
+
         setData({
+          tier,
+          tierLabel,
+          reasons,
+          summary,
+          metrics,
+          usingFallbackSummary,
+          error,
+        })
+
+        writeCachedCredibility(generationContextKey, {
           tier,
           tierLabel,
           reasons,
@@ -238,7 +333,7 @@ export function useAiSellerCredibility({
     return () => {
       cancelled = true
     }
-  }, [enabled, aiInput, requestNonce])
+  }, [enabled, aiInput, generationContextKey, requestNonce])
 
   return {
     data,

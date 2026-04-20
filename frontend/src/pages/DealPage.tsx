@@ -84,14 +84,17 @@ export function DealPage() {
   const isBuyer = !!walletAddress && deal?.buyer === walletAddress
   const viewerRole = isSeller ? 'seller' : isBuyer ? 'buyer' : 'visitor'
 
-  const shouldShowBuyerCredibility =
+  const showPendingCredibility = !!deal && deal.status === 'PendingPayment' && !isSeller
+  const showActiveBuyerCredibility =
     !!deal &&
     isBuyer &&
     (deal.status === 'FundedAwaitingShipment' || deal.status === 'ShippedAwaitingReceipt')
+  const shouldShowBuyerCredibility = showPendingCredibility || showActiveBuyerCredibility
 
   const { data: credibilityData, loading: credibilityLoading, retry: retryCredibility } =
     useAiSellerCredibility({
       enabled: shouldShowBuyerCredibility,
+      dealId: deal ? deal.deal_id.toString() : null,
       sellerAddress: deal?.seller ?? null,
       dealStatus: deal?.status ?? null,
       itemName: deal?.item_name ?? null,

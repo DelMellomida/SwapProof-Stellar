@@ -95,7 +95,7 @@ async function callGeminiText(prompt: string, maxOutputTokens: number, temperatu
 
 export interface SellerCredibilitySummaryInput {
   sellerAddress: string
-  dealStatus: 'FundedAwaitingShipment' | 'ShippedAwaitingReceipt'
+  dealStatus: 'PendingPayment' | 'FundedAwaitingShipment' | 'ShippedAwaitingReceipt'
   itemName: string
   escrowAmountXlm: string
   shippingUrgency: string
