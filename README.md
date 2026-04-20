@@ -1,6 +1,6 @@
 # SwapProof 🔒
 
-> Trustless P2P escrow for informal marketplace transactions — buyer locks funds on Stellar, seller ships, funds release on confirmation or timeout. No arbiter. No platform. Just two wallets and a contract. Each deal pins its escrow asset on-chain so payout logic cannot be redirected later.
+> Trustless P2P escrow for informal marketplace transactions — buyer locks funds on Stellar, seller ships, funds release on confirmation or timeout. No arbiter. No platform. Just two wallets and a contract. Each deal pins a seller-approved escrow asset on-chain so payout logic cannot be redirected later.
 
 ---
 
@@ -55,14 +55,14 @@ SwapProof locks the buyer's XLM in a Soroban smart contract the moment they open
 
 ```
 Seller creates deal (item, price, timeout)
-  → create_deal() stored on-chain, buyer: null
+  → create_deal() stored on-chain with seller-approved escrow token, buyer: null
   → Shareable link generated: /deal/{deal_id}
 
 Seller pastes link into Facebook Messenger chat
 
 Buyer opens link, connects Freighter wallet, reviews terms
-  → fund_deal() locks XLM in contract, binds buyer address on-chain
-  → escrow token is pinned to the deal on-chain
+  → fund_deal() must match the escrow token already pinned by the seller
+  → buyer address is bound on-chain
   → Deal status: FUNDED
 
 Seller ships item, marks as shipped on-chain
@@ -149,8 +149,8 @@ Seller taps Claim Payment
 
 | Function | Caller | What it does |
 |---|---|---|
-| `create_deal` | Seller | Registers deal with no buyer assigned; emits `created` event |
-| `fund_deal` | Buyer | Locks XLM in escrow; binds buyer address on-chain; emits `funded` event |
+| `create_deal` | Seller | Registers deal with no buyer assigned and pins the seller-approved escrow token; emits `created` event |
+| `fund_deal` | Buyer | Locks the pinned escrow asset in escrow; binds buyer address on-chain; emits `funded` event |
 | `mark_shipped` | Seller only | Records shipment on-chain; starts buyer confirmation window; emits `shipped` event |
 | `confirm_receipt` | Buyer only | Releases the deal's pinned escrow token to seller; closes deal; emits `complete` event |
 | `claim_refund` | Buyer only | Returns the deal's pinned escrow token after seller misses shipping deadline; emits `refund` event |
@@ -159,7 +159,7 @@ Seller taps Claim Payment
 
 Contract state is the authoritative source of truth for fund status. Off-chain systems may cache for UX but must not decide fund movement.
 
-The deal record now stores the escrow asset once at funding time and settlement/refund actions always use that stored token instead of accepting a new token address from the caller.
+The deal record now stores the escrow asset at creation time and settlement/refund actions always use that stored token instead of accepting a new token address from the caller.
 
 ---
 

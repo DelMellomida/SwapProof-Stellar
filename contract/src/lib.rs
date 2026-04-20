@@ -47,6 +47,7 @@ impl SwapProofContract {
         env: Env,
         deal_id: u64,
         seller: Address,
+        escrow_token: Address,
         amount: i128,
         ship_deadline_ledger: u32,
         buyer_confirm_window_ledgers: u32,
@@ -75,7 +76,7 @@ impl SwapProofContract {
             deal_id,
             seller: seller.clone(),
             buyer: None,
-            escrow_token: None,
+            escrow_token: Some(escrow_token),
             amount,
             ship_deadline_ledger,
             buyer_confirm_window_ledgers,
@@ -112,7 +113,16 @@ impl SwapProofContract {
             panic!("deal is not available for funding");
         }
 
-        let token_client = token::Client::new(&env, &token_address);
+        let escrow_token = deal
+            .escrow_token
+            .clone()
+            .expect("escrow token not set");
+
+        if escrow_token != token_address {
+            panic!("escrow token mismatch");
+        }
+
+        let token_client = token::Client::new(&env, &escrow_token);
         token_client.transfer(
             &buyer,
             &env.current_contract_address(),
@@ -120,7 +130,6 @@ impl SwapProofContract {
         );
 
         deal.buyer = Some(buyer);
-        deal.escrow_token = Some(token_address);
         deal.status = DealStatus::FundedAwaitingShipment;
 
         env.storage().persistent().set(&key, &deal);

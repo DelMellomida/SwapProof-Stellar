@@ -154,6 +154,7 @@ export async function getDeal(dealId: bigint): Promise<Deal> {
 export async function buildCreateDeal(params: {
   dealId: bigint
   seller: string
+  escrowToken: string
   amountStroops: bigint
   shipDeadlineLedger: number
   buyerConfirmWindowLedgers: number
@@ -164,6 +165,7 @@ export async function buildCreateDeal(params: {
     'create_deal',
     u64Val(params.dealId),
     addressVal(params.seller),
+    addressVal(params.escrowToken),
     i128Val(params.amountStroops),
     u32Val(params.shipDeadlineLedger),
     u32Val(params.buyerConfirmWindowLedgers),

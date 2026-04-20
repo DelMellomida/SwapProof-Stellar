@@ -9,7 +9,6 @@ use crate::{DealStatus, SwapProofContract, SwapProofContractClient};
 struct Fixture {
     env: Env,
     client: SwapProofContractClient<'static>,
-    contract_id: Address,
     usdc: Address,
     seller: Address,
     buyer: Address,
@@ -34,7 +33,7 @@ impl Fixture {
             StellarAssetClient::new(&env, &usdc).mint(&buyer, &escrow_amount);
         }
 
-        Fixture { env, client, contract_id, usdc, seller, buyer }
+        Fixture { env, client, usdc, seller, buyer }
     }
 
     fn token(&self) -> TokenClient<'_> {
@@ -55,6 +54,7 @@ impl Fixture {
         self.client.create_deal(
             &deal_id,
             &self.seller,
+            &self.usdc,
             &amount,
             &ship_deadline,
             &buyer_confirm_window,
@@ -94,7 +94,7 @@ fn test_happy_path_ship_then_confirm() {
     let d = f.client.get_deal(&deal_id);
     assert_eq!(d.status, DealStatus::PendingPayment);
     assert!(d.buyer.is_none());
-    assert!(d.escrow_token.is_none());
+    assert_eq!(d.escrow_token, Some(f.usdc.clone()));
     assert!(d.shipped_at_ledger.is_none());
     assert!(d.buyer_confirm_deadline_ledger.is_none());
 
@@ -273,12 +273,13 @@ fn test_duplicate_deal_id_rejected() {
 }
 
 #[test]
-fn test_confirm_receipt_uses_pinned_escrow_token_only() {
+#[should_panic(expected = "escrow token mismatch")]
+fn test_funding_rejected_for_wrong_escrow_token() {
     let f = Fixture::new(900_0000000);
     let amount = 900_0000000_i128;
     let deal_id = f.default_deal_id();
 
-    f.create_and_fund(
+    f.create_deal(
         deal_id,
         amount,
         f.ship_deadline(),
@@ -289,16 +290,6 @@ fn test_confirm_receipt_uses_pinned_escrow_token_only() {
     let alt_admin = Address::generate(&f.env);
     let alt_token = f.env.register_stellar_asset_contract_v2(alt_admin);
     let alt = alt_token.address();
-    let alt_client = TokenClient::new(&f.env, &alt);
-    let alt_asset = StellarAssetClient::new(&f.env, &alt);
 
-    alt_asset.mint(&f.seller, &amount);
-    alt_client.transfer(&f.seller, &f.contract_id, &amount);
-
-    f.client.mark_shipped(&deal_id, &f.seller);
-    f.client.confirm_receipt(&deal_id, &f.buyer);
-
-    assert_eq!(f.token().balance(&f.seller), amount);
-    assert_eq!(alt_client.balance(&f.seller), 0);
-    assert_eq!(alt_client.balance(&f.contract_id), amount);
+    f.client.fund_deal(&deal_id, &f.buyer, &alt);
 }
