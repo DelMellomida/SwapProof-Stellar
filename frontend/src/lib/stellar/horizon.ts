@@ -41,12 +41,12 @@ async function fetchWithTimeout(url: string): Promise<Response> {
   }
 }
 
-function toDaysSince(dateIso: string): number {
+function toDaysSince(dateIso: string): number | null {
   const createdAtMs = Date.parse(dateIso)
   const nowMs = Date.now()
 
   if (Number.isNaN(createdAtMs)) {
-    return 0
+    return null
   }
 
   return Math.max(0, Math.floor((nowMs - createdAtMs) / (1000 * 60 * 60 * 24)))
@@ -87,6 +87,7 @@ export async function getSellerWalletHistoryMetrics(
     operationsData = null
   }
 
+  const hasOperationsData = operationsData !== null
   const records = operationsData?._embedded?.records ?? []
   const cutoffMs = Date.now() - RECENT_WINDOW_DAYS * 24 * 60 * 60 * 1000
 
@@ -107,8 +108,8 @@ export async function getSellerWalletHistoryMetrics(
   return {
     accountExists: true,
     accountAgeDays: account.created_at ? toDaysSince(account.created_at) : null,
-    recentOperations30d: records.length ? recentRecords.length : null,
-    recentPayments30d: records.length ? recentPayments : null,
+    recentOperations30d: hasOperationsData ? recentRecords.length : null,
+    recentPayments30d: hasOperationsData ? recentPayments : null,
     latestOperationAt: records[0]?.created_at ?? null,
   }
 }
