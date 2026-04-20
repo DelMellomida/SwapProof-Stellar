@@ -8,8 +8,7 @@
 
 **SwapProof**
 🔗 https://swap-proof-stellar-ten.vercel.app/
-🔗 https://stellar.expert/explorer/testnet/tx/c6ddf43a2351f606a58b2c9d6e803e0241e3340e1dc287a8f16bd2952a2df3e0
-🔗 https://lab.stellar.org/r/testnet/contract/CBTUT3VLK4ONMLGMILRPWK5SKJLHPRO6TWSUDPKJKLIVEMD7Z25AXAC6
+🔗 https://lab.stellar.org/r/testnet/contract/CCQQHOKWDLFKW34T3QFSFHTX4KLXSBI7S3OMDCFUAJQKBFVHGJK6HE6H
 
 ---
 
@@ -84,6 +83,21 @@ SwapProof targets the single most common trust failure in SEA informal commerce 
 ## Optional Edge
 
 **Shareable deal link UX** — the seller never needs to explain blockchain to the buyer. One link in Messenger opens a mobile-friendly page that shows the item, price, and timeout in plain language. The buyer connects Freighter and locks funds in one tap. No jargon, no app install, no friction.
+
+---
+
+## Recent Features
+
+### AI Title Optimizer
+- Uses Google Gemini AI to suggest optimized product titles
+- Click "Optimize" button on Create Deal form
+- AI improves searchability (e.g., "old phone" → "iPhone 11 128GB Space Gray - Excellent Condition")
+- Requires: `VITE_GEMINI_API_KEY` in `frontend/.env.local`
+
+### Enhanced Deadline Display
+- Shows exact expiration dates and times (e.g., "Expires May 5 at 2:30 PM · 3d 4h remaining")
+- Real-time countdown timers on deal cards
+- Better UX for tracking shipping & buyer review windows
 
 ---
 
