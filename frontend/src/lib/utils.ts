@@ -58,7 +58,7 @@ export function formatTimeout(timeoutLedger: number, currentLedger: number): str
  * Returns true if the timeout has passed on-chain.
  */
 export function isTimeoutPassed(timeoutLedger: number, currentLedger: number): boolean {
-  return currentLedger > timeoutLedger
+  return currentLedger >= timeoutLedger
 }
 
 // ─── Deal ID generation ───────────────────────────────────────────────────────
